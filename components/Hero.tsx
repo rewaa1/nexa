@@ -1,73 +1,140 @@
 "use client";
 
-import { gsap, ScrollTrigger, useGsap } from "@/lib/useGsap";
+import { useEffect, useRef } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import HeroCanvas from "@/components/HeroCanvas";
+import MagneticButton from "@/components/MagneticButton";
+import { SplitChars } from "@/lib/splitChars";
+
+gsap.registerPlugin(ScrollTrigger);
+
+const LINE_STYLE = {
+  fontSize: "clamp(44px, 8vw, 72px)",
+  letterSpacing: "-3px",
+} as const;
 
 export default function Hero() {
-  const { scope, useScopedGsap } = useGsap<HTMLElement>();
+  const heroRef = useRef<HTMLElement>(null);
+  const ghostRef = useRef<HTMLSpanElement>(null);
+  const ctaRef = useRef<HTMLDivElement>(null);
 
-  useScopedGsap(() => {
-    // ── Entrance timeline (on load, not scroll) ──
-    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+  useEffect(() => {
+    if (!heroRef.current) return;
 
-    tl.from(".hero-word", {
-      yPercent: 110,
-      opacity: 0,
-      duration: 1,
-      stagger: 0.12,
-    })
-      .from(
-        ".hero-eyebrow",
-        { y: 20, opacity: 0, duration: 0.8 },
-        0.3
-      )
-      .from(
-        ".hero-fade",
-        { y: 24, opacity: 0, duration: 1, stagger: 0.12 },
-        0.9
-      );
+    const prefersReduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    if (prefersReduced) return;
 
-    // ── Ghost watermark parallax ──
-    gsap.to(".hero-ghost", {
-      yPercent: -40,
-      ease: "none",
-      scrollTrigger: {
-        trigger: scope.current,
-        start: "top top",
-        end: "bottom top",
-        scrub: 2,
-      },
-    });
+    let ctx: gsap.Context | undefined;
 
-    // ── Scroll indicator line draw ──
-    gsap.from(".hero-scroll-line", {
-      scaleY: 0,
-      transformOrigin: "top",
-      duration: 1,
-      delay: 1.6,
-      ease: "power2.out",
-    });
+    // Defer one tick so Lenis + ScrollTrigger are wired before we build triggers.
+    const timer = setTimeout(() => {
+      ctx = gsap.context(() => {
+        // ── Character-level headline reveal (rises from the line mask) ──
+        const chars = heroRef.current!.querySelectorAll(".char");
+        gsap.fromTo(
+          chars,
+          { y: "110%", rotateZ: 3 },
+          {
+            y: "0%",
+            rotateZ: 0,
+            duration: 0.9,
+            ease: "power4.out",
+            stagger: 0.022,
+            delay: 0.9, // after the page loader lifts
+          }
+        );
 
-    ScrollTrigger.refresh();
-  });
+        // ── Eyebrow + subtext/CTA fade in, after the headline ──
+        gsap.from(".hero-eyebrow", {
+          y: 20,
+          opacity: 0,
+          duration: 0.8,
+          ease: "power3.out",
+          delay: 1.0,
+        });
+        gsap.from(".hero-fade", {
+          y: 24,
+          opacity: 0,
+          duration: 1,
+          stagger: 0.12,
+          ease: "power3.out",
+          delay: 1.5,
+        });
+
+        // ── Ghost watermark parallax — drifts up and slowly scales ──
+        gsap.to(ghostRef.current, {
+          yPercent: -35,
+          scale: 1.08,
+          ease: "none",
+          scrollTrigger: {
+            trigger: heroRef.current,
+            start: "top top",
+            end: "bottom top",
+            scrub: 1.5,
+          },
+        });
+
+        // ── CTA buttons drift down slightly as the hero scrolls away ──
+        gsap.to(ctaRef.current, {
+          y: 30,
+          ease: "none",
+          scrollTrigger: {
+            trigger: heroRef.current,
+            start: "top top",
+            end: "bottom top",
+            scrub: 1,
+          },
+        });
+
+        // ── Scroll indicator line draw ──
+        gsap.from(".hero-scroll-line", {
+          scaleY: 0,
+          transformOrigin: "top",
+          duration: 1,
+          delay: 1.6,
+          ease: "power2.out",
+        });
+
+        ScrollTrigger.refresh();
+      }, heroRef);
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      ctx?.revert();
+    };
+  }, []);
 
   return (
     <section
-      ref={scope}
+      ref={heroRef}
       id="top"
       className="relative flex min-h-[100svh] w-full items-center overflow-hidden px-6 pt-[68px] md:px-10"
     >
-      {/* Ghost / watermark word */}
-      <span
-        className="hero-ghost pointer-events-none absolute left-1/2 top-1/2 -z-0 -translate-x-1/2 -translate-y-1/2 select-none font-display font-extrabold leading-none"
-        style={{
-          fontSize: "clamp(120px, 28vw, 360px)",
-          color: "rgba(255,255,255,0.018)",
-          letterSpacing: "-0.04em",
-        }}
+      {/* Living WebGL particle field, behind everything */}
+      <HeroCanvas />
+
+      {/* Ghost / watermark word — centered via flex wrapper so GSAP fully
+          owns the transform on the inner <span> (no CSS translate to fight) */}
+      <div
+        className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center"
         aria-hidden
       >
-        BUILD
-      </span>
+        <span
+          ref={ghostRef}
+          className="hero-ghost select-none font-display font-extrabold leading-none"
+          style={{
+            fontSize: "clamp(120px, 28vw, 360px)",
+            color: "rgba(255,255,255,0.018)",
+            letterSpacing: "-0.04em",
+          }}
+        >
+          BUILD
+        </span>
+      </div>
 
       <div className="relative z-10 mx-auto flex h-full w-full max-w-[1400px] flex-col justify-center">
         {/* Eyebrow */}
@@ -79,41 +146,27 @@ export default function Hero() {
           <span className="eyebrow text-fg/80">Full-spectrum web studio</span>
         </div>
 
-        {/* Headline */}
+        {/* Headline — character-level mask reveal */}
         <h1 className="font-display font-extrabold leading-[0.95]">
-          <span className="block overflow-hidden">
-            <span
-              className="hero-word inline-block"
-              style={{
-                fontSize: "clamp(44px, 8vw, 72px)",
-                letterSpacing: "-3px",
-              }}
-            >
-              We don&rsquo;t build
+          <span className="line-mask">
+            <span className="inline-block" style={LINE_STYLE}>
+              <SplitChars text={"We don’t build"} />
             </span>
           </span>
-          <span className="block overflow-hidden md:pl-20">
+          <span className="line-mask md:pl-20">
             <span
-              className="hero-word inline-block italic"
-              style={{
-                fontSize: "clamp(44px, 8vw, 72px)",
-                letterSpacing: "-3px",
-                color: "var(--muted)",
-              }}
+              className="inline-block italic"
+              style={{ ...LINE_STYLE, color: "var(--muted)" }}
             >
-              websites.
+              <SplitChars text="websites." />
             </span>
           </span>
-          <span className="block overflow-hidden">
-            <span
-              className="hero-word inline-block"
-              style={{
-                fontSize: "clamp(44px, 8vw, 72px)",
-                letterSpacing: "-3px",
-              }}
-            >
-              We build{" "}
-              <span style={{ color: "var(--accent)" }}>worlds.</span>
+          <span className="line-mask">
+            <span className="inline-block" style={LINE_STYLE}>
+              <SplitChars text="We build " />
+              <span style={{ color: "var(--accent)" }}>
+                <SplitChars text="worlds." />
+              </span>
             </span>
           </span>
         </h1>
@@ -128,29 +181,34 @@ export default function Hero() {
             — designed to make people feel something.
           </p>
 
-          <div className="hero-fade flex flex-wrap items-center gap-3">
-            <a
-              href="#work"
-              data-cursor="link"
-              className="rounded-full px-6 py-3 text-[13px] text-white transition-transform duration-300 hover:scale-[1.03]"
-              style={{ background: "var(--accent)" }}
-            >
-              See our work
-            </a>
-            <a
-              href="#process"
-              data-cursor="link"
-              className="rounded-full px-6 py-3 text-[13px] text-fg transition-colors duration-300 hover:bg-white/5"
-              style={{ border: "0.5px solid var(--border)" }}
-            >
-              How we think
-            </a>
+          {/* ctaRef wrapper handles scroll parallax; inner handles entrance */}
+          <div ref={ctaRef}>
+            <div className="hero-fade flex flex-wrap items-center gap-3">
+              <MagneticButton strength={0.4}>
+                <a
+                  href="#work"
+                  data-cursor="link"
+                  className="inline-block rounded-full px-6 py-3 text-[13px] text-white transition-transform duration-300 hover:scale-[1.03]"
+                  style={{ background: "var(--accent)" }}
+                >
+                  See our work
+                </a>
+              </MagneticButton>
+              <a
+                href="#process"
+                data-cursor="link"
+                className="rounded-full px-6 py-3 text-[13px] text-fg transition-colors duration-300 hover:bg-white/5"
+                style={{ border: "0.5px solid var(--border)" }}
+              >
+                How we think
+              </a>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Vertical scroll indicator */}
-      <div className="hero-fade absolute bottom-8 right-6 hidden flex-col items-center gap-3 md:right-10 md:flex">
+      <div className="hero-fade absolute bottom-8 right-6 z-10 hidden flex-col items-center gap-3 md:right-10 md:flex">
         <span
           className="eyebrow rotate-180 text-fg/50"
           style={{ writingMode: "vertical-rl" }}

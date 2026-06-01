@@ -1,73 +1,132 @@
 "use client";
 
-import { gsap, ScrollTrigger, useGsap } from "@/lib/useGsap";
+import { useEffect, useRef } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 
-const STATS = [
-  { value: 80, suffix: "+", label: "Projects launched" },
-  { value: 6, suffix: " yr", label: "In the craft" },
-  { value: 4.9, suffix: "★", label: "Client rating", decimals: 1 },
+gsap.registerPlugin(ScrollTrigger);
+
+type Stat = {
+  value: number;
+  decimals: number;
+  suffix: string;
+  label: string;
+};
+
+const STATS: Stat[] = [
+  { value: 80, decimals: 0, suffix: "+", label: "Projects launched" },
+  { value: 6, decimals: 0, suffix: " yr", label: "In the craft" },
+  { value: 4.9, decimals: 1, suffix: "★", label: "Client rating" },
 ];
 
+// Format the live counter value with the right precision and suffix.
+const formatStat = (v: number, stat: Stat) =>
+  (stat.decimals ? v.toFixed(stat.decimals) : Math.round(v).toString()) +
+  stat.suffix;
+
 export default function Statement() {
-  const { scope, useScopedGsap } = useGsap<HTMLElement>();
+  const sectionRef = useRef<HTMLElement>(null);
+  const leftColRef = useRef<HTMLDivElement>(null);
+  const rightColRef = useRef<HTMLDivElement>(null);
+  const statRefs = useRef<(HTMLSpanElement | null)[]>([]);
 
-  useScopedGsap(() => {
-    const trigger = {
-      trigger: scope.current,
-      start: "top 75%",
-      end: "top 30%",
+  useEffect(() => {
+    const prefersReduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    if (prefersReduced) return;
+
+    let ctx: gsap.Context | undefined;
+
+    // Defer one tick so Lenis + ScrollTrigger are wired before we build triggers.
+    const timer = setTimeout(() => {
+      ctx = gsap.context(() => {
+        const trigger = {
+          trigger: sectionRef.current,
+          start: "top 75%",
+          end: "top 30%",
+        };
+
+        gsap.from(".stmt-word", {
+          x: -40,
+          opacity: 0,
+          stagger: 0.1,
+          duration: 0.9,
+          ease: "power3.out",
+          scrollTrigger: trigger,
+        });
+
+        gsap.from(".stmt-line", {
+          y: 30,
+          opacity: 0,
+          stagger: 0.08,
+          duration: 0.9,
+          ease: "power3.out",
+          scrollTrigger: trigger,
+        });
+
+        // ── Multi-speed parallax: left column drifts slower than the right ──
+        gsap.to(leftColRef.current, {
+          y: -40,
+          ease: "none",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 1.5,
+          },
+        });
+        gsap.to(rightColRef.current, {
+          y: -80,
+          ease: "none",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 1.5,
+          },
+        });
+
+        // ── Counter-up: tween a proxy object, write to the DOM on update ──
+        STATS.forEach((stat, i) => {
+          const el = statRefs.current[i];
+          if (!el) return;
+          const obj = { val: 0 };
+          gsap.to(obj, {
+            val: stat.value,
+            duration: 2,
+            ease: "power2.out",
+            delay: i * 0.2, // stagger each counter 0.2s after the previous
+            scrollTrigger: {
+              trigger: el,
+              start: "top 80%",
+              once: true,
+            },
+            onUpdate: () => {
+              el.textContent = formatStat(obj.val, stat);
+            },
+          });
+        });
+
+        ScrollTrigger.refresh();
+      }, sectionRef);
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      ctx?.revert();
     };
-
-    gsap.from(".stmt-word", {
-      x: -40,
-      opacity: 0,
-      stagger: 0.1,
-      duration: 0.9,
-      ease: "power3.out",
-      scrollTrigger: trigger,
-    });
-
-    gsap.from(".stmt-line", {
-      y: 30,
-      opacity: 0,
-      stagger: 0.08,
-      duration: 0.9,
-      ease: "power3.out",
-      scrollTrigger: trigger,
-    });
-
-    // Counter-up: tween a proxy object and write formatted values to the DOM.
-    STATS.forEach((stat, i) => {
-      const el = scope.current?.querySelector<HTMLElement>(
-        `[data-stat="${i}"]`
-      );
-      if (!el) return;
-      const obj = { v: 0 };
-      gsap.to(obj, {
-        v: stat.value,
-        duration: 1.6,
-        ease: "power2.out",
-        scrollTrigger: { trigger: el, start: "top 85%" },
-        onUpdate: () => {
-          el.textContent = stat.decimals
-            ? obj.v.toFixed(stat.decimals)
-            : Math.round(obj.v).toString();
-        },
-      });
-    });
-
-    ScrollTrigger.refresh();
-  });
+  }, []);
 
   return (
     <section
-      ref={scope}
+      ref={sectionRef}
       id="studio"
       className="mx-auto max-w-[1400px] px-6 py-28 md:px-10 md:py-40"
     >
       <div className="grid grid-cols-1 items-end gap-12 md:grid-cols-2 md:gap-20">
         {/* Left column */}
-        <div>
+        <div ref={leftColRef}>
           <p className="eyebrow mb-8" style={{ color: "var(--muted)" }}>
             <span className="stmt-word inline-block">01 — Who we are</span>
           </p>
@@ -87,7 +146,7 @@ export default function Statement() {
         </div>
 
         {/* Right column */}
-        <div className="flex flex-col gap-6">
+        <div ref={rightColRef} className="flex flex-col gap-6">
           <p
             className="stmt-line text-[14px] leading-[1.9]"
             style={{ color: "var(--muted)" }}
@@ -118,11 +177,14 @@ export default function Statement() {
           >
             {STATS.map((stat, i) => (
               <div key={stat.label}>
-                <div className="flex items-baseline font-display font-bold">
-                  <span className="text-[28px]" data-stat={i}>
-                    0
+                <div className="font-display text-[28px] font-bold">
+                  <span
+                    ref={(el) => {
+                      statRefs.current[i] = el;
+                    }}
+                  >
+                    {formatStat(0, stat)}
                   </span>
-                  <span className="text-[28px]">{stat.suffix}</span>
                 </div>
                 <div
                   className="mt-1 text-[10px] uppercase"

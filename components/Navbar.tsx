@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { gsap, useGSAP } from "@/lib/useGsap";
+import MagneticButton from "@/components/MagneticButton";
 
 const LINKS = ["Work", "Services", "Studio", "Stories"];
 
@@ -81,20 +82,22 @@ export default function Navbar() {
         </ul>
 
         {/* Right: CTA (desktop) */}
-        <a
-          href="#contact"
-          data-cursor="link"
-          className="group hidden items-center gap-2 rounded-full px-5 py-2 text-[12px] tracking-wide text-fg transition-colors duration-300 hover:text-white md:inline-flex"
-          style={{ border: "0.5px solid var(--border)" }}
-          onMouseEnter={(e) =>
-            (e.currentTarget.style.background = "var(--accent)")
-          }
-          onMouseLeave={(e) =>
-            (e.currentTarget.style.background = "transparent")
-          }
-        >
-          Start a project <span aria-hidden>↗</span>
-        </a>
+        <MagneticButton className="hidden md:inline-block" strength={0.3}>
+          <a
+            href="#contact"
+            data-cursor="link"
+            className="group inline-flex items-center gap-2 rounded-full px-5 py-2 text-[12px] tracking-wide text-fg transition-colors duration-300 hover:text-white"
+            style={{ border: "0.5px solid var(--border)" }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.background = "var(--accent)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.background = "transparent")
+            }
+          >
+            Start a project <span aria-hidden>↗</span>
+          </a>
+        </MagneticButton>
 
         {/* Mobile: hamburger */}
         <button

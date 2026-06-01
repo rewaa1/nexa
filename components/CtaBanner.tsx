@@ -1,6 +1,8 @@
 "use client";
 
+import { useRef } from "react";
 import { gsap, ScrollTrigger, useGsap } from "@/lib/useGsap";
+import MagneticButton from "@/components/MagneticButton";
 
 const HEADLINE = [
   ["Your", "next", "chapter"],
@@ -9,6 +11,8 @@ const HEADLINE = [
 
 export default function CtaBanner() {
   const { scope, useScopedGsap } = useGsap<HTMLElement>();
+  const leftWordRef = useRef<HTMLSpanElement>(null);
+  const rightWordRef = useRef<HTMLSpanElement>(null);
 
   useScopedGsap(() => {
     gsap.from(".cta-word", {
@@ -36,6 +40,28 @@ export default function CtaBanner() {
       },
     });
 
+    // ── Parallax: the headline halves drift apart as the section enters ──
+    gsap.to(leftWordRef.current, {
+      x: -30,
+      ease: "none",
+      scrollTrigger: {
+        trigger: scope.current,
+        start: "top bottom",
+        end: "bottom top",
+        scrub: 1.5,
+      },
+    });
+    gsap.to(rightWordRef.current, {
+      x: 30,
+      ease: "none",
+      scrollTrigger: {
+        trigger: scope.current,
+        start: "top bottom",
+        end: "bottom top",
+        scrub: 1.5,
+      },
+    });
+
     ScrollTrigger.refresh();
   });
 
@@ -52,7 +78,11 @@ export default function CtaBanner() {
           style={{ fontSize: "clamp(34px,4.6vw,44px)", letterSpacing: "-1.5px" }}
         >
           {HEADLINE.map((line, li) => (
-            <span key={li} className="block overflow-hidden">
+            <span
+              key={li}
+              ref={li === 0 ? leftWordRef : rightWordRef}
+              className="block overflow-hidden"
+            >
               {line.map((word) => (
                 <span key={word} className="cta-word mr-[0.25em] inline-block">
                   <span
@@ -80,18 +110,20 @@ export default function CtaBanner() {
             for a full redesign — let&rsquo;s figure out what this should feel
             like.
           </p>
-          <a
-            href="mailto:hello@stud.io"
-            data-cursor="link"
-            className="cta-fade text-[14px] text-white transition-transform duration-300 hover:scale-[1.03]"
-            style={{
-              background: "var(--accent)",
-              borderRadius: 100,
-              padding: "14px 28px",
-            }}
-          >
-            Start a conversation →
-          </a>
+          <MagneticButton className="cta-fade" strength={0.4}>
+            <a
+              href="mailto:hello@stud.io"
+              data-cursor="link"
+              className="inline-block text-[14px] text-white transition-transform duration-300 hover:scale-[1.03]"
+              style={{
+                background: "var(--accent)",
+                borderRadius: 100,
+                padding: "14px 28px",
+              }}
+            >
+              Start a conversation →
+            </a>
+          </MagneticButton>
         </div>
       </div>
     </section>

@@ -34,13 +34,7 @@ function Track({ ariaHidden = false }: { ariaHidden?: boolean }) {
 
 export default function Marquee() {
   return (
-    <div
-      className="marquee-group relative w-full overflow-hidden py-4"
-      style={{
-        borderTop: "0.5px solid var(--border)",
-        borderBottom: "0.5px solid var(--border)",
-      }}
-    >
+    <div className="marquee-group relative w-full overflow-hidden py-4">
       <Track />
     </div>
   );

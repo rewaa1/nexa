@@ -96,6 +96,13 @@ html {
   text-transform: uppercase;
 }
 
+/* Character mask reveal — each headline line clips its rising glyphs */
+.line-mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.1em; /* prevent descender clipping */
+}
+
 ::selection {
   background: var(--accent);
   color: #fff;

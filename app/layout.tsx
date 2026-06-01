@@ -3,7 +3,8 @@ import { Syne, DM_Sans } from "next/font/google";
 import "./globals.css";
 import SmoothScroll from "@/components/SmoothScroll";
 import CustomCursor from "@/components/CustomCursor";
-import PageTransition from "@/components/PageTransition";
+import PageLoader from "@/components/PageLoader";
+import Grain from "@/components/Grain";
 
 const syne = Syne({
   subsets: ["latin"],
@@ -40,9 +41,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${syne.variable} ${dmSans.variable}`}>
       <body>
-        <PageTransition />
+        <PageLoader />
         <CustomCursor />
         <SmoothScroll>{children}</SmoothScroll>
+        {/* Film-grain overlay sits on top of everything */}
+        <Grain />
       </body>
     </html>
   );

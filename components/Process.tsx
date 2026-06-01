@@ -1,6 +1,10 @@
 "use client";
 
-import { gsap, ScrollTrigger, useGsap } from "@/lib/useGsap";
+import { useEffect, useRef } from "react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+gsap.registerPlugin(ScrollTrigger);
 
 const STEPS = [
   {
@@ -26,44 +30,106 @@ const STEPS = [
 ];
 
 export default function Process() {
-  const { scope, useScopedGsap } = useGsap<HTMLElement>();
+  const sectionRef = useRef<HTMLElement>(null);
+  const headingRef = useRef<HTMLDivElement>(null);
+  const borderRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const numRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const titleRefs = useRef<(HTMLHeadingElement | null)[]>([]);
+  const bodyRefs = useRef<(HTMLParagraphElement | null)[]>([]);
 
-  useScopedGsap(() => {
-    gsap.set(".process-rule", { scaleX: 0, transformOrigin: "left" });
-    gsap.to(".process-rule", {
-      scaleX: 1,
-      duration: 0.9,
-      stagger: 0.15,
-      ease: "power3.out",
-      scrollTrigger: {
-        trigger: ".process-grid",
-        start: "top 80%",
-      },
-    });
+  useEffect(() => {
+    const prefersReduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    if (prefersReduced) return;
 
-    gsap.from(".process-card", {
-      y: 40,
-      opacity: 0,
-      duration: 0.9,
-      stagger: 0.12,
-      ease: "power3.out",
-      scrollTrigger: {
-        trigger: ".process-grid",
-        start: "top 82%",
-      },
-    });
+    let ctx: gsap.Context | undefined;
 
-    ScrollTrigger.refresh();
-  });
+    // Defer one tick so Lenis + ScrollTrigger are wired before we build triggers.
+    const timer = setTimeout(() => {
+      ctx = gsap.context(() => {
+        const trigger = {
+          trigger: sectionRef.current,
+          start: "top 65%",
+          once: true,
+        };
+
+        // Hide the elements that animate in after their border draws.
+        gsap.set(borderRefs.current, { scaleX: 0, transformOrigin: "left" });
+        gsap.set(
+          [...numRefs.current, ...titleRefs.current, ...bodyRefs.current],
+          { y: 20, opacity: 0 }
+        );
+
+        // ── Parallax: the intro heading drifts left while scrolling through ──
+        gsap.to(headingRef.current, {
+          x: -60,
+          ease: "none",
+          scrollTrigger: {
+            trigger: sectionRef.current,
+            start: "top bottom",
+            end: "bottom top",
+            scrub: 2,
+          },
+        });
+
+        // 1) Border lines draw left → right, staggered across the row.
+        gsap.to(borderRefs.current, {
+          scaleX: 1,
+          duration: 0.9,
+          ease: "power3.inOut",
+          stagger: 0.18,
+          scrollTrigger: trigger,
+        });
+
+        // 2/3/4) Number, then title, then body fade up — each card's content
+        //    sequenced after its own border finishes for a "written live" feel.
+        STEPS.forEach((_, i) => {
+          const base = i * 0.18 + 0.6;
+          gsap.to(numRefs.current[i], {
+            y: 0,
+            opacity: 1,
+            duration: 0.6,
+            ease: "power2.out",
+            delay: base,
+            scrollTrigger: trigger,
+          });
+          gsap.to(titleRefs.current[i], {
+            y: 0,
+            opacity: 1,
+            duration: 0.6,
+            ease: "power2.out",
+            delay: base + 0.15,
+            scrollTrigger: trigger,
+          });
+          gsap.to(bodyRefs.current[i], {
+            y: 0,
+            opacity: 1,
+            duration: 0.6,
+            ease: "power2.out",
+            delay: base + 0.3,
+            scrollTrigger: trigger,
+          });
+        });
+
+        ScrollTrigger.refresh();
+      }, sectionRef);
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      ctx?.revert();
+    };
+  }, []);
 
   return (
     <section
-      ref={scope}
+      ref={sectionRef}
       id="process"
       className="mx-auto max-w-[1400px] px-6 py-20 md:px-10 md:py-28"
     >
       {/* Intro */}
-      <div className="mb-16 max-w-[460px]">
+      <div ref={headingRef} className="mb-16 max-w-[460px]">
         <p className="eyebrow mb-5" style={{ color: "var(--muted)" }}>
           03 — How we work
         </p>
@@ -84,24 +150,45 @@ export default function Process() {
 
       {/* Grid */}
       <div className="process-grid grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
-        {STEPS.map((step) => (
+        {STEPS.map((step, i) => (
           <div key={step.num} className="process-card">
             <div
-              className="process-rule mb-6 h-px w-full"
-              style={{ background: "var(--accent)" }}
+              className="card-border-line"
+              ref={(el) => {
+                borderRefs.current[i] = el;
+              }}
+              style={{
+                height: 1,
+                width: "100%",
+                background: "var(--accent)",
+                transform: "scaleX(0)",
+                transformOrigin: "left",
+                marginBottom: 28,
+              }}
             />
             <div
               className="mb-4 font-display text-[13px] font-bold"
               style={{ color: "var(--muted)" }}
+              ref={(el) => {
+                numRefs.current[i] = el;
+              }}
             >
               {step.num}
             </div>
-            <h3 className="mb-3 font-display text-[18px] font-bold leading-tight">
+            <h3
+              className="mb-3 font-display text-[18px] font-bold leading-tight"
+              ref={(el) => {
+                titleRefs.current[i] = el;
+              }}
+            >
               {step.title}
             </h3>
             <p
               className="text-[13px] leading-[1.8]"
               style={{ color: "var(--muted)" }}
+              ref={(el) => {
+                bodyRefs.current[i] = el;
+              }}
             >
               {step.body}
             </p>
