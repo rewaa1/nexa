@@ -1,8 +1,9 @@
 "use client";
 
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import WorkCardCanvas, { CanvasVariant } from "@/components/WorkCardCanvas";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -11,10 +12,8 @@ type Project = {
   tag: string;
   title: string;
   year: string;
-  gradient: string;
-  gridColor: string;
-  orbColor: string;
-  orbStyle: CSSProperties;
+  variant: CanvasVariant;
+  bg: string;
 };
 
 const PROJECTS: Project[] = [
@@ -23,40 +22,32 @@ const PROJECTS: Project[] = [
     tag: "SaaS Platform",
     title: "Orion Analytics Dashboard",
     year: "2024",
-    gradient: "linear-gradient(135deg, #0D0400 0%, #2A0D00 100%)",
-    gridColor: "rgba(255,100,30,0.06)",
-    orbColor: "rgba(255,80,20,0.18)",
-    orbStyle: { bottom: -40, right: -40 },
+    variant: "orion",
+    bg: "#0D0400",
   },
   {
     id: 2,
     tag: "E-commerce",
     title: "Volta Store",
     year: "2025",
-    gradient: "linear-gradient(135deg, #00060F 0%, #001830 100%)",
-    gridColor: "rgba(30,100,255,0.06)",
-    orbColor: "rgba(20,80,255,0.15)",
-    orbStyle: { top: -40, left: -40 },
+    variant: "volta",
+    bg: "#00060F",
   },
   {
     id: 3,
     tag: "Mobile PWA",
     title: "Flux App",
     year: "2025",
-    gradient: "linear-gradient(135deg, #050010 0%, #15002E 100%)",
-    gridColor: "rgba(120,40,255,0.06)",
-    orbColor: "rgba(100,20,255,0.15)",
-    orbStyle: { top: "50%", right: -40, transform: "translateY(-50%)" },
+    variant: "flux",
+    bg: "#050010",
   },
   {
     id: 4,
     tag: "Marketing Site",
     title: "Apex Campaign",
     year: "2024",
-    gradient: "linear-gradient(135deg, #001A0A, #003320)",
-    gridColor: "rgba(40,200,120,0.06)",
-    orbColor: "rgba(20,180,90,0.15)",
-    orbStyle: { bottom: -40, left: -40 },
+    variant: "apex",
+    bg: "#001A0A",
   },
 ];
 
@@ -79,34 +70,17 @@ function WorkCard({
         height: stacked ? 420 : 560,
         borderRadius: 2,
         border: "0.5px solid var(--border)",
+        background: project.bg,
       }}
     >
-      {/* Inner visual — scales from 1.1 → 1.0 on scroll (parallax within card) */}
+      {/* Inner visual — hover lifts (scale 1.02); a nested layer takes the
+          scroll parallax so the two transforms don't fight. */}
       <div className="work-card-inner absolute inset-0 transition-transform duration-[600ms] ease-out group-hover:scale-[1.02]">
-        <div
-          className="work-card-visual absolute inset-0"
-          style={{ background: project.gradient }}
-        >
-          {/* abstract grid texture */}
-          <span
-            className="absolute inset-0"
-            style={{
-              backgroundImage: `repeating-linear-gradient(0deg, ${project.gridColor} 0px, transparent 1px, transparent 40px), repeating-linear-gradient(90deg, ${project.gridColor} 0px, transparent 1px, transparent 40px)`,
-              backgroundSize: "40px 40px",
-            }}
-            aria-hidden
-          />
-          {/* glowing orb */}
-          <span
-            className="absolute"
-            style={{
-              width: 220,
-              height: 220,
-              borderRadius: "50%",
-              background: `radial-gradient(circle, ${project.orbColor} 0%, transparent 70%)`,
-              ...project.orbStyle,
-            }}
-            aria-hidden
+        <div className="work-card-parallax absolute inset-0">
+          {/* Generative "video loop" background; brightens on hover */}
+          <WorkCardCanvas
+            variant={project.variant}
+            className="transition-[filter] duration-500 ease-out group-hover:[filter:brightness(1.3)_saturate(1.4)]"
           />
         </div>
       </div>
@@ -225,7 +199,9 @@ export default function WorkGrid() {
 
         // Per-card inner parallax: visual scales 1.1 → 1.0 as the card crosses
         // the viewport (tied to the horizontal tween via containerAnimation).
-        const visuals = track.querySelectorAll<HTMLElement>(".work-card-inner");
+        const visuals = track.querySelectorAll<HTMLElement>(
+          ".work-card-parallax"
+        );
         visuals.forEach((visual) => {
           const card = visual.closest(".work-card") as HTMLElement | null;
           if (!card) return;

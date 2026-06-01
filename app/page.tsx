@@ -7,10 +7,12 @@ import Process from "@/components/Process";
 import CtaBanner from "@/components/CtaBanner";
 import Footer from "@/components/Footer";
 import SectionDivider from "@/components/SectionDivider";
+import ShaderTransition from "@/components/ShaderTransition";
 
 export default function Home() {
   return (
     <main>
+      <ShaderTransition />
       <Navbar />
       <Hero />
       <SectionDivider />
