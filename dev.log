@@ -1,0 +1,15 @@
+
+> studio-portfolio@0.1.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use, trying 3001 instead.
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3001
+
+ ✓ Starting...
+ ✓ Ready in 5.1s
+ ○ Compiling / ...
+ ✓ Compiled / in 9s (549 modules)
+ GET / 200 in 9632ms
+ GET / 200 in 80ms
+[?25h

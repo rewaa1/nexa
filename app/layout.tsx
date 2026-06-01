@@ -1,0 +1,49 @@
+import type { Metadata } from "next";
+import { Syne, DM_Sans } from "next/font/google";
+import "./globals.css";
+import SmoothScroll from "@/components/SmoothScroll";
+import CustomCursor from "@/components/CustomCursor";
+import PageTransition from "@/components/PageTransition";
+
+const syne = Syne({
+  subsets: ["latin"],
+  weight: ["700", "800"],
+  variable: "--font-syne",
+  display: "swap",
+});
+
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["300", "400", "500"],
+  variable: "--font-dm-sans",
+  display: "swap",
+});
+
+export const metadata: Metadata = {
+  title: "STUD.IO — Full-spectrum web studio",
+  description:
+    "We don't build websites. We build worlds. A small, fiercely focused studio crafting SaaS products, commerce platforms, campaigns and mobile-first apps.",
+  metadataBase: new URL("https://stud.io"),
+  openGraph: {
+    title: "STUD.IO — We build worlds",
+    description:
+      "Cinematic, story-driven web experiences. SaaS, commerce, campaigns, and mobile-first apps.",
+    type: "website",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" className={`${syne.variable} ${dmSans.variable}`}>
+      <body>
+        <PageTransition />
+        <CustomCursor />
+        <SmoothScroll>{children}</SmoothScroll>
+      </body>
+    </html>
+  );
+}

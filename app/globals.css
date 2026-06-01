@@ -1,0 +1,210 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────────────────────────────────────────
+   DESIGN TOKENS
+─────────────────────────────────────────── */
+:root {
+  --bg: #060606;
+  --fg: #ebe8e0;
+  --muted: rgba(235, 232, 224, 0.38);
+  --accent: #ff3d1f;
+  --border: rgba(235, 232, 224, 0.08);
+  --card: #0d0d0d;
+}
+
+/* ───────────────────────────────────────────
+   BASE
+─────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-dm-sans), sans-serif;
+  font-weight: 300;
+  font-size: 14px;
+  line-height: 1.85;
+  overflow-x: hidden;
+}
+
+/* Hide native cursor on devices with a fine pointer (desktop) */
+@media (hover: hover) and (pointer: fine) {
+  body {
+    cursor: none;
+  }
+  a,
+  button {
+    cursor: none;
+  }
+}
+
+/* ───────────────────────────────────────────
+   SCROLLBAR HIDE
+─────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+html {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* ───────────────────────────────────────────
+   TYPOGRAPHY HELPERS
+─────────────────────────────────────────── */
+.font-display {
+  font-family: var(--font-syne), sans-serif;
+}
+
+.eyebrow {
+  font-family: var(--font-dm-sans), sans-serif;
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ───────────────────────────────────────────
+   MARQUEE (pure CSS, no JS)
+─────────────────────────────────────────── */
+.marquee {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: marquee-scroll 28s linear infinite;
+}
+
+.marquee-group:hover .marquee {
+  animation-play-state: paused;
+}
+
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    /* two identical tracks => shift by exactly one track width */
+    transform: translateX(-50%);
+  }
+}
+
+/* ───────────────────────────────────────────
+   CUSTOM CURSOR
+─────────────────────────────────────────── */
+.cursor-dot,
+.cursor-ring,
+.cursor-view {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 9999;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+  will-change: transform;
+}
+
+.cursor-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--fg);
+}
+
+.cursor-ring {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--fg);
+  opacity: 0.3;
+}
+
+.cursor-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 500;
+  opacity: 0;
+  scale: 0;
+}
+
+/* Only render custom cursor where it makes sense */
+@media (hover: none), (pointer: coarse) {
+  .cursor-dot,
+  .cursor-ring,
+  .cursor-view {
+    display: none !important;
+  }
+}
+
+/* ───────────────────────────────────────────
+   PAGE TRANSITION OVERLAY
+─────────────────────────────────────────── */
+.page-transition {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 10000;
+  transform: translateY(0);
+}
+
+/* ───────────────────────────────────────────
+   REDUCED MOTION — disable all motion
+─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .marquee {
+    animation: none !important;
+  }
+  .page-transition {
+    display: none !important;
+  }
+}
