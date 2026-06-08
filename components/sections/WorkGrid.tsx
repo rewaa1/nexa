@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import WorkCardCanvas, { CanvasVariant } from "@/components/WorkCardCanvas";
+import WorkCardCanvas, { CanvasVariant } from "@/components/canvas/WorkCardCanvas";
 
 gsap.registerPlugin(ScrollTrigger);
 

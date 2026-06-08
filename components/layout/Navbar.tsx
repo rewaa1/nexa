@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
-import { gsap, useGSAP } from "@/lib/useGsap";
-import MagneticButton from "@/components/MagneticButton";
+import { gsap, useGSAP } from "@/lib/hooks/useGsap";
+import MagneticButton from "@/components/ui/MagneticButton";
 
 const LINKS = ["Work", "Services", "Studio", "Stories"];
 
