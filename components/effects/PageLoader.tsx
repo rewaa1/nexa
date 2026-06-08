@@ -1,55 +1,71 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { gsap } from "gsap";
+import { useEffect, useState } from "react";
+import {
+  LOADERS,
+  LOADER_ORDER,
+  DEFAULT_LOADER,
+  type LoaderKey,
+} from "@/components/loaders";
 
 /**
- * Full-screen black overlay that covers the page on first load and slides
- * upward to reveal the site. Sets display:none on complete so it never blocks
- * interaction. Skipped under prefers-reduced-motion.
+ * Orchestrates the intro loading screen. Shown on every load of the home page
+ * for now (no persistence). Which loader plays is decided by an optional
+ * `?loader=` URL param so the variants can be compared without code changes:
+ *
+ *   ?loader=orbital | kinetic | counter | words | curtain | stroke | scramble
+ *   ?loader=1..7     (by position in LOADER_ORDER)
+ *   ?loader=random   (pick one at random each load)
+ *
+ * With no param it falls back to DEFAULT_LOADER.
+ *
+ * Render phases:
+ *   cover  — opaque panel painted on first frame / during SSR (no content flash)
+ *   active — the chosen loader plays its intro and reveals the site
+ *   done   — unmounted
  */
 export default function PageLoader() {
-  const loaderRef = useRef<HTMLDivElement>(null);
+  const [phase, setPhase] = useState<"cover" | "active" | "done">("cover");
+  const [key, setKey] = useState<LoaderKey>(DEFAULT_LOADER);
 
   useEffect(() => {
-    const loader = loaderRef.current;
-    if (!loader) return;
-
-    const prefersReduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
-
-    if (prefersReduced) {
-      loader.style.display = "none";
-      return;
-    }
-
-    const ctx = gsap.context(() => {
-      gsap.to(loader, {
-        yPercent: -100,
-        duration: 1.2,
-        ease: "expo.inOut",
-        delay: 0.2,
-        onComplete: () => {
-          loader.style.display = "none";
-        },
-      });
-    }, loaderRef);
-
-    return () => ctx.revert();
+    setKey(resolveLoader());
+    setPhase("active");
   }, []);
 
-  return (
-    <div
-      ref={loaderRef}
-      aria-hidden
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "#060606",
-        zIndex: 9999,
-        transformOrigin: "top",
-      }}
-    />
-  );
+  if (phase === "done") return null;
+
+  if (phase === "cover") {
+    return (
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "var(--bg)",
+          zIndex: 10000,
+        }}
+      />
+    );
+  }
+
+  const Active = LOADERS[key];
+  return <Active onComplete={() => setPhase("done")} />;
+}
+
+function resolveLoader(): LoaderKey {
+  const raw = new URLSearchParams(window.location.search).get("loader");
+  if (!raw) return DEFAULT_LOADER;
+
+  if (raw === "random") {
+    return LOADER_ORDER[Math.floor(Math.random() * LOADER_ORDER.length)];
+  }
+  if ((LOADER_ORDER as string[]).includes(raw)) {
+    return raw as LoaderKey;
+  }
+  const n = Number.parseInt(raw, 10);
+  if (n >= 1 && n <= LOADER_ORDER.length) {
+    return LOADER_ORDER[n - 1];
+  }
+  return DEFAULT_LOADER;
 }
