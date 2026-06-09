@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import OrbitMap from "@/components/prototype/OrbitMap";
 
 // 3D version is WebGL — load client-only so `three` stays out of the server graph
-const OrbitMap3D = dynamic(() => import("@/components/prototype/OrbitMap3D"), {
+const OrbitMap3D = dynamic(() => import("@/components/prototype/orbit"), {
   ssr: false,
   loading: () => <div style={{ position: "fixed", inset: 0, background: "var(--bg)" }} />,
 });
