@@ -39,6 +39,6 @@ export const LOADER_ORDER: LoaderKey[] = [
 ];
 
 /** The loader shown when no `?loader=` override is present. */
-export const DEFAULT_LOADER: LoaderKey = "orbital";
+export const DEFAULT_LOADER: LoaderKey = "kinetic";
 
 export type { LoaderProps };
