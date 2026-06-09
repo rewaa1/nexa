@@ -28,7 +28,11 @@ export default function Statement() {
   const sectionRef = useRef<HTMLElement>(null);
   const leftColRef = useRef<HTMLDivElement>(null);
   const rightColRef = useRef<HTMLDivElement>(null);
-  const statRefs = useRef<(HTMLSpanElement | null)[]>([]);
+  const stat1Ref = useRef<HTMLSpanElement>(null);
+  const stat2Ref = useRef<HTMLSpanElement>(null);
+  const stat3Ref = useRef<HTMLSpanElement>(null);
+  const triggered = useRef(false);
+  const statRefList = [stat1Ref, stat2Ref, stat3Ref];
 
   useEffect(() => {
     const prefersReduced = window.matchMedia(
@@ -87,27 +91,6 @@ export default function Statement() {
           },
         });
 
-        // ── Counter-up: tween a proxy object, write to the DOM on update ──
-        STATS.forEach((stat, i) => {
-          const el = statRefs.current[i];
-          if (!el) return;
-          const obj = { val: 0 };
-          gsap.to(obj, {
-            val: stat.value,
-            duration: 2,
-            ease: "power2.out",
-            delay: i * 0.2, // stagger each counter 0.2s after the previous
-            scrollTrigger: {
-              trigger: el,
-              start: "top 80%",
-              once: true,
-            },
-            onUpdate: () => {
-              el.textContent = formatStat(obj.val, stat);
-            },
-          });
-        });
-
         ScrollTrigger.refresh();
       }, sectionRef);
     }, 100);
@@ -116,6 +99,57 @@ export default function Statement() {
       clearTimeout(timer);
       ctx?.revert();
     };
+  }, []);
+
+  // ── Stat counters — fire once when the first stat scrolls into view ──
+  useEffect(() => {
+    const trigger = ScrollTrigger.create({
+      trigger: stat1Ref.current,
+      start: "top 85%",
+      onEnter: () => {
+        if (triggered.current) return;
+        triggered.current = true;
+
+        // Counter 1: 80+
+        const obj1 = { val: 0 };
+        gsap.to(obj1, {
+          val: 80,
+          duration: 2.2,
+          ease: "power2.out",
+          onUpdate: () => {
+            if (stat1Ref.current)
+              stat1Ref.current.textContent = Math.round(obj1.val) + "+";
+          },
+        });
+
+        // Counter 2: 6 yr
+        const obj2 = { val: 0 };
+        gsap.to(obj2, {
+          val: 6,
+          duration: 2,
+          ease: "power2.out",
+          delay: 0.2,
+          onUpdate: () => {
+            if (stat2Ref.current)
+              stat2Ref.current.textContent = Math.round(obj2.val) + " yr";
+          },
+        });
+
+        // Counter 3: 4.9★
+        const obj3 = { val: 0 };
+        gsap.to(obj3, {
+          val: 4.9,
+          duration: 2,
+          ease: "power2.out",
+          delay: 0.4,
+          onUpdate: () => {
+            if (stat3Ref.current)
+              stat3Ref.current.textContent = obj3.val.toFixed(1) + "★";
+          },
+        });
+      },
+    });
+    return () => trigger.kill();
   }, []);
 
   return (
@@ -178,13 +212,7 @@ export default function Statement() {
             {STATS.map((stat, i) => (
               <div key={stat.label}>
                 <div className="font-display text-[28px] font-bold">
-                  <span
-                    ref={(el) => {
-                      statRefs.current[i] = el;
-                    }}
-                  >
-                    {formatStat(0, stat)}
-                  </span>
+                  <span ref={statRefList[i]}>{formatStat(0, stat)}</span>
                 </div>
                 <div
                   className="mt-1 text-[10px] uppercase"

@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode } from "react";
-import { useLenis } from "@/lib/useLenis";
+import { useLenis } from "@/lib/hooks/useLenis";
 
 /**
  * Client boundary that owns the single Lenis instance for the whole app.

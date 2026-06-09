@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { Syne, DM_Sans } from "next/font/google";
 import "./globals.css";
-import SmoothScroll from "@/components/SmoothScroll";
-import CustomCursor from "@/components/CustomCursor";
-import PageLoader from "@/components/PageLoader";
-import Grain from "@/components/Grain";
+import SmoothScroll from "@/components/effects/SmoothScroll";
+import CustomCursor from "@/components/effects/CustomCursor";
+import PageLoader from "@/components/effects/PageLoader";
+import Grain from "@/components/effects/Grain";
 
 const syne = Syne({
   subsets: ["latin"],

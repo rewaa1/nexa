@@ -3,8 +3,8 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import HeroCanvas from "@/components/HeroCanvas";
-import MagneticButton from "@/components/MagneticButton";
+import HeroCanvas from "@/components/canvas/HeroCanvas";
+import MagneticButton from "@/components/ui/MagneticButton";
 import { SplitChars } from "@/lib/splitChars";
 
 gsap.registerPlugin(ScrollTrigger);

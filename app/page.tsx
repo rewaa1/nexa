@@ -1,16 +1,18 @@
-import Navbar from "@/components/Navbar";
-import Hero from "@/components/Hero";
-import Marquee from "@/components/Marquee";
-import Statement from "@/components/Statement";
-import WorkGrid from "@/components/WorkGrid";
-import Process from "@/components/Process";
-import CtaBanner from "@/components/CtaBanner";
-import Footer from "@/components/Footer";
-import SectionDivider from "@/components/SectionDivider";
+import Navbar from "@/components/layout/Navbar";
+import Hero from "@/components/sections/Hero";
+import Marquee from "@/components/sections/Marquee";
+import Statement from "@/components/sections/Statement";
+import WorkGrid from "@/components/sections/WorkGrid";
+import Process from "@/components/sections/Process";
+import CtaBanner from "@/components/sections/CtaBanner";
+import Footer from "@/components/layout/Footer";
+import SectionDivider from "@/components/ui/SectionDivider";
+import ShaderTransition from "@/components/effects/ShaderTransition";
 
 export default function Home() {
   return (
     <main>
+      <ShaderTransition />
       <Navbar />
       <Hero />
       <SectionDivider />

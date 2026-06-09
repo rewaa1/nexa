@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef } from "react";
-import { gsap, ScrollTrigger, useGsap } from "@/lib/useGsap";
-import MagneticButton from "@/components/MagneticButton";
+import { gsap, ScrollTrigger, useGsap } from "@/lib/hooks/useGsap";
+import MagneticButton from "@/components/ui/MagneticButton";
 
 const HEADLINE = [
   ["Your", "next", "chapter"],
