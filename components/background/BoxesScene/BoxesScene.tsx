@@ -5,7 +5,7 @@ import Spline from "@splinetool/react-spline";
 // Spline runtime scene — carries the designed lighting, camera and the built-in
 // hover interactions (unlike a GLB, which is geometry + materials only).
 const SCENE_URL =
-  "https://prod.spline.design/pfDJ7hugeuQELo7r/scene.splinecode";
+  "https://prod.spline.design/HxuyZ0sVjLbYo7hX/scene.splinecode";
 
 /**
  * Spline-runtime backdrop: renders the scene exactly as designed (lights,
