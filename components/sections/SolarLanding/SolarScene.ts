@@ -4,19 +4,18 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { gsap } from "gsap";
 
 import { POSITION_VERT, STAR_CORE_FRAG, STAR_CORONA_FRAG } from "./solarShaders";
-import type { SolarPlanet } from "./solarConfig";
+import type { AddonConfig, SolarPlanet } from "./solarConfig";
 import {
   AMBIENT,
   BLOOM,
-  CAM_DIR,
   CAMERA_FOV,
   ENV_MAP_INTENSITY,
   FOG_DENSITY,
-  HERO_DISTANCE,
-  HERO_TARGET,
-  LOOK_AHEAD,
+  HERO_CAM_LOOK,
+  HERO_CAM_POS,
   ORBIT_RING_OPACITY,
   restDistance,
   STAR,
@@ -26,34 +25,40 @@ import {
   TONE_EXPOSURE,
 } from "./solarConfig";
 
-/**
- * Owns the entire WebGL scene: a glowing blue star (key light) with textured PBR
- * planets arranged linearly along the X axis. Image-based lighting, starfield,
- * and bloom post-processing. Framework-agnostic — React drives it via `focus()`.
- *
- * The camera flies forward along the planet line. Look-ahead offsets shift the
- * active planet left of center so the next planet peeks on the right.
- */
+/* ─────────────────────────────────────────────── */
+/*  Types                                          */
+/* ─────────────────────────────────────────────── */
+
+export interface CameraState {
+  posX: number;
+  posY: number;
+  posZ: number;
+  lookX: number;
+  lookY: number;
+  lookZ: number;
+}
+
+/* ─────────────────────────────────────────────── */
+/*  SolarScene                                     */
+/* ─────────────────────────────────────────────── */
+
 export class SolarScene {
-  /** World position of each planet (camera targets). */
   readonly planetPositions: THREE.Vector3[] = [];
-
-  /**
-   * Camera look-at targets with look-ahead offset toward the next planet.
-   * For planet i (not last): lerp(pos[i], pos[i+1], LOOK_AHEAD).
-   * For the last planet: its own position (no peek).
-   */
-  readonly lookAtTargets: THREE.Vector3[] = [];
-
-  /** Camera rest distance per planet. */
   readonly restDistances: number[];
+  readonly heroState: CameraState = {
+    posX: HERO_CAM_POS[0],
+    posY: HERO_CAM_POS[1],
+    posZ: HERO_CAM_POS[2],
+    lookX: HERO_CAM_LOOK[0],
+    lookY: HERO_CAM_LOOK[1],
+    lookZ: HERO_CAM_LOOK[2],
+  };
+  readonly planetStates: CameraState[] = [];
 
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
   private readonly composer: EffectComposer;
-  private readonly direction: THREE.Vector3;
-  private readonly tempVector = new THREE.Vector3();
   private readonly isMobile = window.innerWidth < 768;
 
   private readonly starMesh: THREE.Mesh;
@@ -63,12 +68,22 @@ export class SolarScene {
   private readonly textures: THREE.Texture[] = [];
   private readonly pmremGenerator: THREE.PMREMGenerator;
   private readonly environmentRenderTarget: THREE.WebGLRenderTarget;
+
+  /** Holographic add-on orbiter groups — one per planet. */
+  private readonly addonGroups: THREE.Group[] = [];
+  /** All materials inside each addon group (for opacity control). */
+  private readonly addonMaterials: THREE.MeshBasicMaterial[][] = [];
+  /** The GSAP proxy objects controlling opacity per group. */
+  private readonly addonOpacities = {
+    values: [] as number[],
+  };
+
   private animationFrameId = 0;
+  private activePlanetIndex = -1;
 
   constructor(canvas: HTMLCanvasElement, private readonly planetData: SolarPlanet[]) {
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    this.direction = new THREE.Vector3(...CAM_DIR).normalize();
     this.restDistances = planetData.map((planet) => restDistance(planet.radius));
 
     // --- renderer ---
@@ -81,9 +96,9 @@ export class SolarScene {
     // --- scene basics ---
     this.scene.background = new THREE.Color(0x060606);
     this.scene.fog = new THREE.FogExp2(0x060606, FOG_DENSITY);
-    this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, viewportWidth / viewportHeight, 0.1, 400);
+    this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, viewportWidth / viewportHeight, 0.1, 800);
 
-    // --- image-based lighting → soft fill so dark sides are never pure black ---
+    // --- image-based lighting ---
     this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
     this.environmentRenderTarget = this.pmremGenerator.fromScene(new RoomEnvironment(), 0.04);
     this.scene.environment = this.environmentRenderTarget.texture;
@@ -98,13 +113,9 @@ export class SolarScene {
       fragmentShader: STAR_CORE_FRAG,
       uniforms: { uTime: { value: 0 } },
     });
-    this.starMesh = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(STAR.radius, 5),
-      this.starMaterial
-    );
+    this.starMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(STAR.radius, 5), this.starMaterial);
     this.scene.add(this.starMesh);
 
-    // corona shell — back-facing, additive-blended glow around the core
     this.scene.add(
       new THREE.Mesh(
         new THREE.SphereGeometry(STAR.radius * 1.4, 48, 48),
@@ -123,8 +134,14 @@ export class SolarScene {
     this.starField = this.buildStarField();
     this.composer = this.buildComposer(viewportWidth, viewportHeight);
 
-    // Start the camera at the hero overview position
-    this.focus(HERO_TARGET[0], HERO_TARGET[1], HERO_TARGET[2], HERO_DISTANCE);
+    this.setCameraState(
+      this.heroState.posX,
+      this.heroState.posY,
+      this.heroState.posZ,
+      this.heroState.lookX,
+      this.heroState.lookY,
+      this.heroState.lookZ
+    );
   }
 
   /* ─────────────────────────────────────────── */
@@ -139,20 +156,12 @@ export class SolarScene {
     const textureLoader = new THREE.TextureLoader();
     const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
 
-    this.planetData.forEach((planet) => {
-      // Orbit ring — faint torus for context
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(planet.orbit, 0.012, 3, 240),
-        new THREE.MeshBasicMaterial({ color: 0xebe8e0, transparent: true, opacity: ORBIT_RING_OPACITY })
-      );
-      ring.rotation.x = Math.PI / 2;
-      orbitGroup.add(ring);
-
-      // Planet group positioned on the orbit
+    this.planetData.forEach((planet, index) => {
+      // Planet group positioned in space
       const planetGroup = new THREE.Group();
       planetGroup.position.set(
         Math.cos(planet.angle) * planet.orbit,
-        0,
+        planet.yOffset,
         Math.sin(planet.angle) * planet.orbit
       );
       orbitGroup.add(planetGroup);
@@ -181,28 +190,210 @@ export class SolarScene {
       mesh.rotation.y = Math.random() * Math.PI;
       planetGroup.add(mesh);
       this.planets.push(mesh);
+
+      // Add Saturn Rings if configured
+      if (planet.hasRings) {
+        const ringTexture = textureLoader.load(TEXTURE_PATH + "8k_saturn_ring_alpha.png");
+        this.textures.push(ringTexture);
+        const ringGeo = new THREE.RingGeometry(planet.radius * 1.3, planet.radius * 2.2, 64);
+        // Correct UVs for RingGeometry to map the horizontal gradient properly
+        const pos = ringGeo.attributes.position;
+        const uvs = ringGeo.attributes.uv;
+        const v3 = new THREE.Vector3();
+        for (let i = 0; i < pos.count; i++) {
+          v3.fromBufferAttribute(pos, i);
+          const r = v3.length();
+          const normRadius = (r - planet.radius * 1.3) / (planet.radius * 2.2 - planet.radius * 1.3);
+          uvs.setXY(i, normRadius, 0.5);
+        }
+        
+        const ringMat = new THREE.MeshStandardMaterial({
+          map: ringTexture,
+          color: 0xffe28b,
+          transparent: true,
+          side: THREE.DoubleSide,
+          opacity: 0.95,
+          roughness: 0.8,
+        });
+        const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+        ringMesh.rotation.x = -Math.PI / 2 + 0.2;
+        ringMesh.rotation.y = 0.1;
+        planetGroup.add(ringMesh);
+      }
+
+      // Build holographic add-on orbiters for this planet
+      const { group, materials } = this.buildAddons(planet);
+      planetGroup.add(group);
+      this.addonGroups.push(group);
+      this.addonMaterials.push(materials);
+      this.addonOpacities.values.push(0);
     });
 
-    // Resolve world positions after the matrix hierarchy is fully built
     this.scene.updateMatrixWorld(true);
-    this.planets.forEach((planet) =>
-      this.planetPositions.push(planet.getWorldPosition(new THREE.Vector3()))
-    );
+    this.planets.forEach((planet) => this.planetPositions.push(planet.getWorldPosition(new THREE.Vector3())));
 
-    // Precompute look-at targets with look-ahead offset toward the next planet
-    for (let index = 0; index < this.planetPositions.length; index++) {
-      if (index < this.planetPositions.length - 1) {
-        const target = new THREE.Vector3().lerpVectors(
-          this.planetPositions[index],
-          this.planetPositions[index + 1],
-          LOOK_AHEAD
-        );
-        this.lookAtTargets.push(target);
-      } else {
-        // Last planet — no peek, look at it directly
-        this.lookAtTargets.push(this.planetPositions[index].clone());
+    // Compute dynamic left-right camera framing
+    const UP = new THREE.Vector3(0, 1, 0);
+
+    for (let i = 0; i < this.planetPositions.length; i++) {
+      const currentPos = this.planetPositions[i];
+      // Target the next planet, or the sun (0,0,0) if it's the last planet
+      const nextPos = i < this.planetPositions.length - 1 ? this.planetPositions[i + 1] : new THREE.Vector3(0, 0, 0);
+
+      // Direction from current planet towards the next visual target
+      const dir = new THREE.Vector3().subVectors(nextPos, currentPos).normalize();
+      
+      // Calculate a local right vector relative to the line of sight
+      const right = new THREE.Vector3().crossVectors(dir, UP).normalize();
+      // Ensure local up is perfectly orthogonal
+      const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+
+      const dist = this.restDistances[i];
+
+      // Position camera backwards along dir, and slightly UP for a good angle.
+      // Crucially, shift the camera RIGHT to place the planet "between middle and left".
+      const shiftRight = dist * 0.28; 
+      const shiftUp = dist * 0.12;
+      
+      const cameraPos = currentPos.clone()
+        .addScaledVector(dir, -dist)
+        .addScaledVector(right, shiftRight)
+        .addScaledVector(up, shiftUp);
+
+      // Look slightly to the right of the planet so it stays framed left
+      const lookAtTarget = currentPos.clone().addScaledVector(right, shiftRight * 0.8);
+
+      this.planetStates.push({
+        posX: cameraPos.x,
+        posY: cameraPos.y,
+        posZ: cameraPos.z,
+        lookX: lookAtTarget.x,
+        lookY: lookAtTarget.y,
+        lookZ: lookAtTarget.z,
+      });
+    }
+  }
+
+  private buildAddons(planet: SolarPlanet): { group: THREE.Group; materials: THREE.MeshBasicMaterial[] } {
+    const group = new THREE.Group();
+    const materials: THREE.MeshBasicMaterial[] = [];
+    const accent = new THREE.Color(planet.accentColor);
+    const holoTexture = this.createHoloTexture(planet.accentColor);
+
+    for (const addon of planet.addons) {
+      for (let index = 0; index < addon.count; index++) {
+        const { mesh, material } = this.createOrbiterMesh(addon, index, accent, holoTexture);
+
+        const orbitRadius = planet.radius * (addon.orbitRadius[0] + Math.random() * (addon.orbitRadius[1] - addon.orbitRadius[0]));
+        const tilt = addon.tilt[0] + Math.random() * (addon.tilt[1] - addon.tilt[0]);
+
+        mesh.userData = {
+          kind: addon.kind,
+          orbitRadius,
+          tilt,
+          speed: 0.15 + Math.random() * 0.35,
+          phase: Math.random() * Math.PI * 2,
+        };
+
+        group.add(mesh);
+        materials.push(material);
       }
     }
+
+    group.visible = false;
+    materials.forEach((material) => (material.opacity = 0));
+
+    return { group, materials };
+  }
+
+  private createOrbiterMesh(
+    addon: AddonConfig,
+    index: number,
+    accent: THREE.Color,
+    holoTexture: THREE.CanvasTexture
+  ): { mesh: THREE.Mesh; material: THREE.MeshBasicMaterial } {
+    let geometry: THREE.BufferGeometry;
+    let baseOpacity: number;
+
+    switch (addon.kind) {
+      case "holoPlane": {
+        // Use a curved screen (cylinder segment) instead of a flat plane
+        const radius = 1.0 + Math.random() * 0.5;
+        const height = 0.4 + Math.random() * 0.4;
+        const thetaLength = 0.4 + Math.random() * 0.4;
+        geometry = new THREE.CylinderGeometry(radius, radius, height, 16, 1, true, 0, thetaLength);
+        baseOpacity = 0.85; // Boosted opacity
+        break;
+      }
+      case "techRing": {
+        const ringRadius = 0.4 + Math.random() * 0.6;
+        geometry = new THREE.TorusGeometry(ringRadius, 0.015, 8, 64);
+        baseOpacity = 0.65;
+        break;
+      }
+      case "particle":
+      default: {
+        geometry = new THREE.SphereGeometry(0.04 + Math.random() * 0.05, 8, 8);
+        baseOpacity = 0.95;
+        break;
+      }
+    }
+
+    const material = new THREE.MeshBasicMaterial({
+      color: accent,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: addon.kind === "holoPlane" ? THREE.DoubleSide : THREE.FrontSide,
+      map: addon.kind === "holoPlane" ? holoTexture : null,
+    });
+
+    material.userData = { baseOpacity };
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = index;
+    return { mesh, material };
+  }
+
+  private createHoloTexture(accentHex: number): THREE.CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 128;
+    const context = canvas.getContext("2d")!;
+
+    const red = (accentHex >> 16) & 0xff;
+    const green = (accentHex >> 8) & 0xff;
+    const blue = accentHex & 0xff;
+
+    // Gradient fill
+    const gradient = context.createLinearGradient(0, 0, 256, 128);
+    gradient.addColorStop(0, `rgba(${red}, ${green}, ${blue}, 0.95)`);
+    gradient.addColorStop(1, `rgba(${Math.max(0, red - 20)}, ${Math.max(0, green - 20)}, ${Math.min(255, blue + 20)}, 0.4)`);
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 256, 128);
+
+    // Fake UI content shapes
+    context.fillStyle = "rgba(255, 255, 255, 0.4)";
+    context.fillRect(16, 16, 100, 8);
+    context.fillRect(16, 36, 160, 40);
+    context.fillRect(16, 88, 120, 6);
+    context.fillRect(16, 104, 90, 6);
+
+    // Scanlines for hologram feel
+    context.fillStyle = "rgba(0, 0, 0, 0.3)";
+    for (let scanY = 0; scanY < 128; scanY += 4) {
+      context.fillRect(0, scanY, 256, 2);
+    }
+
+    // Glowing border
+    context.strokeStyle = `rgba(${red}, ${green}, ${blue}, 0.9)`;
+    context.lineWidth = 4;
+    context.strokeRect(2, 2, 252, 124);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
   }
 
   private buildStarField() {
@@ -210,7 +401,7 @@ export class SolarScene {
     const positions = new Float32Array(particleCount * 3);
 
     for (let index = 0; index < particleCount; index++) {
-      const radius = 60 + Math.random() * 80;
+      const radius = 120 + Math.random() * 280;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
 
@@ -224,12 +415,7 @@ export class SolarScene {
 
     const starField = new THREE.Points(
       geometry,
-      new THREE.PointsMaterial({
-        color: 0xebe8e0,
-        size: 0.07,
-        transparent: true,
-        opacity: 0.6,
-      })
+      new THREE.PointsMaterial({ color: 0xebe8e0, size: 0.07, transparent: true, opacity: 0.6 })
     );
     this.scene.add(starField);
     return starField;
@@ -254,24 +440,89 @@ export class SolarScene {
   /*  Public API                                 */
   /* ─────────────────────────────────────────── */
 
-  /** Point the camera at a focus position from the fixed viewing direction. */
-  focus(targetX: number, targetY: number, targetZ: number, distance: number) {
-    this.tempVector.set(targetX, targetY, targetZ);
-    this.camera.position.copy(this.tempVector).addScaledVector(this.direction, distance);
-    this.camera.lookAt(this.tempVector);
+  setCameraState(posX: number, posY: number, posZ: number, lookX: number, lookY: number, lookZ: number) {
+    this.camera.position.set(posX, posY, posZ);
+    this.camera.lookAt(lookX, lookY, lookZ);
+  }
+
+  setActivePlanet(index: number) {
+    if (this.activePlanetIndex === index) return;
+    this.activePlanetIndex = index;
+
+    for (let i = 0; i < this.addonGroups.length; i++) {
+      if (i === index) {
+        // Flicker on sequence with GSAP: 0.5s delay -> flash on -> off -> solid on
+        gsap.killTweensOf(this.addonOpacities.values, i.toString());
+        gsap.timeline()
+          .set(this.addonOpacities.values, { [i]: 0 })
+          .to(this.addonOpacities.values, { [i]: 1, duration: 0.1, delay: 0.5, ease: "power4.out" })
+          .to(this.addonOpacities.values, { [i]: 0.1, duration: 0.1, ease: "power4.in" })
+          .to(this.addonOpacities.values, { [i]: 0.8, duration: 0.08, ease: "power4.out" })
+          .to(this.addonOpacities.values, { [i]: 0.3, duration: 0.08, ease: "power4.in" })
+          .to(this.addonOpacities.values, { [i]: 1, duration: 0.3, ease: "power2.out" });
+      } else {
+        // Smooth fade out for inactive planets
+        gsap.to(this.addonOpacities.values, { [i]: 0, duration: 0.6, ease: "power2.inOut" });
+      }
+    }
   }
 
   start() {
     const renderLoop = () => {
       this.animationFrameId = requestAnimationFrame(renderLoop);
+
       this.starMaterial.uniforms.uTime.value += 0.016;
       this.starMesh.rotation.y += 0.0008;
-      // Planets spin in place; orbital positions stay fixed for scroll control
       this.planets.forEach((planet) => (planet.rotation.y += 0.0012));
       this.starField.rotation.y += 0.0002;
+
+      this.updateAddons();
       this.composer.render();
     };
     this.animationFrameId = requestAnimationFrame(renderLoop);
+  }
+
+  private updateAddons() {
+    for (let groupIndex = 0; groupIndex < this.addonGroups.length; groupIndex++) {
+      const group = this.addonGroups[groupIndex];
+      const currentOpacity = this.addonOpacities.values[groupIndex];
+
+      if (currentOpacity < 0.01) {
+        group.visible = false;
+        continue;
+      }
+      group.visible = true;
+
+      const materials = this.addonMaterials[groupIndex];
+      for (const material of materials) {
+        material.opacity = currentOpacity * (material.userData.baseOpacity as number);
+      }
+
+      for (const child of group.children) {
+        const userData = child.userData;
+        if (!userData.phase && userData.phase !== 0) continue;
+
+        userData.phase += userData.speed * 0.016;
+        const angle = userData.phase as number;
+        const orbitRadius = userData.orbitRadius as number;
+        const tilt = userData.tilt as number;
+
+        const cosAngle = Math.cos(angle);
+        const sinAngle = Math.sin(angle);
+
+        child.position.set(
+          cosAngle * orbitRadius,
+          sinAngle * orbitRadius * Math.sin(tilt),
+          sinAngle * orbitRadius * Math.cos(tilt)
+        );
+
+        if (userData.kind === "holoPlane") {
+          // Billboarding, but since they are curved cylinders we rotate them to face the camera properly
+          child.lookAt(this.camera.position);
+          child.rotateX(Math.PI / 2); // align cylinder upright relative to look vector
+        }
+      }
+    }
   }
 
   resize() {

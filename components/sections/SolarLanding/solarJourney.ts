@@ -1,7 +1,7 @@
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
-import { HERO_DISTANCE, HERO_TARGET, HOLD, TRANSITION } from "./solarConfig";
+import { HOLD, SWAY_AMPLITUDE, TRANSITION } from "./solarConfig";
 import type { SolarScene } from "./SolarScene";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -24,16 +24,14 @@ interface SolarJourneyOptions {
 /**
  * Builds the scroll-scrubbed journey through the solar system.
  *
- * The camera flies forward along the planet line — no zoom-out/zoom-in dips.
- * Each transition is a single smooth forward movement from one planet to the next.
+ * Camera choreography:
+ * 1. Hero overview — bird's-eye view from above looking down at the star
+ * 2. Crane-down — camera sweeps from overhead to eye-level at planet 1
+ * 3. Planet sections — eye-level first-person "in-orbit" view
+ * 4. Planet-to-planet — smooth forward travel with right→left→center sway
  *
- * 1. Hero overview → smooth zoom forward into the first planet
- * 2. For each subsequent planet: smooth forward travel while panels crossfade
- *
- * Camera targets use the scene's lookAtTargets (with look-ahead offset) so
- * the active planet sits left of center and the next planet peeks on the right.
- *
- * A gentle snap settles on each rest point. Returns handles for cleanup.
+ * The camera is controlled via 6 animated values (posX/Y/Z + lookX/Y/Z) plus
+ * a sway offset layered on top of posZ.
  */
 export function buildSolarJourney({
   scene,
@@ -42,21 +40,34 @@ export function buildSolarJourney({
   planetPanels,
   onActive,
 }: SolarJourneyOptions): SolarJourney {
-  const lookAt = scene.lookAtTargets;
-  const rest = scene.restDistances;
-  const planetCount = lookAt.length;
+  const heroState = scene.heroState;
+  const planetStates = scene.planetStates;
+  const planetCount = planetStates.length;
 
-  /** Animated camera state — GSAP tweens these values, onUpdate pushes them to the scene. */
+  /**
+   * Animated camera state — GSAP tweens these values, onUpdate pushes them
+   * to the scene. `swayZ` is added to `posZ` for the lateral sway effect.
+   */
   const camera = {
-    targetX: HERO_TARGET[0],
-    targetY: HERO_TARGET[1],
-    targetZ: HERO_TARGET[2],
-    distance: HERO_DISTANCE,
+    posX: heroState.posX,
+    posY: heroState.posY,
+    posZ: heroState.posZ,
+    lookX: heroState.lookX,
+    lookY: heroState.lookY,
+    lookZ: heroState.lookZ,
+    swayZ: 0,
   };
 
   const timeline = gsap.timeline({
     onUpdate: () =>
-      scene.focus(camera.targetX, camera.targetY, camera.targetZ, camera.distance),
+      scene.setCameraState(
+        camera.posX,
+        camera.posY,
+        camera.posZ + camera.swayZ,
+        camera.lookX,
+        camera.lookY,
+        camera.lookZ
+      ),
   });
 
   // Set initial panel visibility — only hero is visible at start
@@ -66,35 +77,38 @@ export function buildSolarJourney({
   const restCenters: number[] = [];
 
   // ─── Phase 1: Hero hold ───────────────────────────────────────────────
-  // Camera stays at the overview distance, hero content visible
   timeline.to({}, { duration: HOLD });
   restCenters.push(HOLD / 2);
 
-  // ─── Phase 2: Hero → Planet 0 (smooth forward zoom) ──────────────────
-  // Camera flies forward from the overview into the first planet
+  // ─── Phase 2: Hero → Planet 0 (crane-down) ────────────────────────────
+  // Camera sweeps from bird's-eye (Y=80, looking down) to eye-level
+  // (Y≈1.5, looking forward). All 6 values interpolate simultaneously.
   const heroTransitionStart = HOLD;
+  const planet0 = planetStates[0];
 
   timeline.to(
     camera,
     {
-      targetX: lookAt[0].x,
-      targetY: lookAt[0].y,
-      targetZ: lookAt[0].z,
-      distance: rest[0],
+      posX: planet0.posX,
+      posY: planet0.posY,
+      posZ: planet0.posZ,
+      lookX: planet0.lookX,
+      lookY: planet0.lookY,
+      lookZ: planet0.lookZ,
       duration: TRANSITION,
       ease: "power2.inOut",
     },
     heroTransitionStart
   );
 
-  // Hero fades out as zoom begins
+  // Hero fades out as the crane begins
   timeline.to(
     heroPanel,
     { autoAlpha: 0, y: -20, duration: 0.3, ease: "power2.in" },
     heroTransitionStart
   );
 
-  // First planet panel fades in near the end of the zoom
+  // First planet panel fades in as the camera arrives at eye-level
   timeline.fromTo(
     planetPanels[0],
     { autoAlpha: 0, y: 24 },
@@ -104,28 +118,64 @@ export function buildSolarJourney({
 
   // Rest center for planet 0
   restCenters.push(heroTransitionStart + TRANSITION + HOLD / 2);
-
-  // Reserve hold time after planet 0 arrives
   timeline.to({}, { duration: HOLD }, heroTransitionStart + TRANSITION);
 
-  // ─── Phase 3: Planet-to-planet forward travel ─────────────────────────
-  // Smooth forward movement — no dip. Camera glides directly to the next planet.
+  // ─── Phase 3: Planet-to-planet forward travel with sway ───────────────
   for (let index = 1; index < planetCount; index++) {
     const transitionStart =
       HOLD + TRANSITION + HOLD + (index - 1) * (TRANSITION + HOLD);
+    const nextState = planetStates[index];
 
-    // Single smooth forward tween — camera travels directly to the next lookAt
+    // Smooth forward travel — all 6 camera values interpolate
     timeline.to(
       camera,
       {
-        targetX: lookAt[index].x,
-        targetY: lookAt[index].y,
-        targetZ: lookAt[index].z,
-        distance: rest[index],
+        posX: nextState.posX,
+        posY: nextState.posY,
+        posZ: nextState.posZ,
+        lookX: nextState.lookX,
+        lookY: nextState.lookY,
+        lookZ: nextState.lookZ,
         duration: TRANSITION,
         ease: "power2.inOut",
       },
       transitionStart
+    );
+
+    // Sway: right → left → center (three sequential tweens on swayZ)
+    const swaySegment = TRANSITION / 3;
+
+    // 0 → +A (sway right, slow start)
+    timeline.to(
+      camera,
+      {
+        swayZ: SWAY_AMPLITUDE,
+        duration: swaySegment,
+        ease: "power2.out",
+      },
+      transitionStart
+    );
+
+    // +A → -A (swing through center to left, fast middle)
+    timeline.to(
+      camera,
+      {
+        swayZ: -SWAY_AMPLITUDE,
+        duration: swaySegment,
+        ease: "power1.inOut",
+      },
+      transitionStart + swaySegment
+    );
+
+    // -A → 0 (settle at center, slow stop)
+    timeline.to(
+      camera,
+      {
+        swayZ: 0,
+        duration: swaySegment,
+        ease: "power2.in",
+      },
+      transitionStart + swaySegment * 2
     );
 
     // Previous panel fades out, new panel fades in
@@ -144,8 +194,6 @@ export function buildSolarJourney({
 
     // Rest center for this planet
     restCenters.push(transitionStart + TRANSITION + HOLD / 2);
-
-    // Reserve hold time
     timeline.to({}, { duration: HOLD }, transitionStart + TRANSITION);
   }
 

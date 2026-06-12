@@ -1,34 +1,44 @@
 /** Tunable constants for the solar-system landing page. */
 
 /**
- * Tilt of the orbit plane — zero for a linear arrangement along the X axis.
- * The camera flies forward through the planet line, not around a tilted ring.
+ * Tilt of the whole orbit plane (radians).
+ * Zero — planets are scattered at random angles in the XZ plane with individual Y offsets.
  */
 export const TILT = 0;
 
-/** Scroll timeline units: length of a transition vs. the rest/hold on a section. */
-export const TRANSITION = 1;
+/** Scroll timeline units: transition duration and rest/hold at each section. */
+export const TRANSITION = 1.2;
 export const HOLD = 0.5;
 
 /**
  * How far ahead the camera looks toward the next planet (0–1 blend).
- * Shifts the active planet to the left of frame and reveals the next planet on the right.
+ * Shifts the active planet left of frame, reveals the next planet on the right.
  */
-export const LOOK_AHEAD = 0.15;
+export const LOOK_AHEAD = 0.12;
 
-/** Scroll height per section (vh). Total scroll = (planets + 1 for hero) × this. */
-export const SCROLL_VH_PER_SECTION = 120;
+/** Scroll height per section (vh). More scroll per section = smoother transitions. */
+export const SCROLL_VH_PER_SECTION = 140;
 
 /**
- * Camera viewing direction (offset from the focus point, normalised in the scene).
- * Mostly looking forward along -X (toward increasing planet positions),
- * with a slight Y lift and Z offset so the camera sits behind and to the right
- * of the planet — giving the cinematic first-person "in-orbit" framing.
+ * Direction offset from the lookAt target to compute eye-level camera position.
+ * Mostly behind (-X), slightly above (+Y), slightly to the right (+Z).
+ * Normalised in the scene class.
  */
 export const CAM_DIR: [number, number, number] = [-1, 0.2, 0.5];
 
-/** Camera field of view — slightly narrower for a cinematic first-person feel. */
+/** Camera field of view. */
 export const CAMERA_FOV = 55;
+
+/** Hero camera — bird's-eye view from above, looking down at the star. */
+export const HERO_CAM_POS: [number, number, number] = [0, 90, 0];
+// We look slightly off-center along Z so the sun appears higher on the screen, avoiding the center text
+export const HERO_CAM_LOOK: [number, number, number] = [0, 0, 15];
+
+/**
+ * Sway amplitude during planet-to-planet transitions.
+ * The camera sways right (+Z), then left (-Z), then settles at center (0).
+ */
+export const SWAY_AMPLITUDE = 3.5;
 
 /** Where the planet textures live under /public. */
 export const TEXTURE_PATH = "/textures/planets/";
@@ -36,8 +46,8 @@ export const TEXTURE_PATH = "/textures/planets/";
 /** Renderer / grade. */
 export const TONE_EXPOSURE = 1.1;
 
-/** Lower fog density so distant planets remain visible across the wide gaps. */
-export const FOG_DENSITY = 0.003;
+/** Very low fog density so planets at wide orbits remain visible. */
+export const FOG_DENSITY = 0.0012;
 
 /** Bloom (UnrealBloomPass). */
 export const BLOOM = {
@@ -47,11 +57,11 @@ export const BLOOM = {
   threshold: 0.6,
 };
 
-/** Blue star core + key light. */
+/** Blue star core + key light. Slightly larger and brighter for the wide system. */
 export const STAR = {
-  radius: 2.2,
+  radius: 2.4,
   lightColor: 0x4d8bff,
-  lightIntensity: 320,
+  lightIntensity: 380,
 };
 
 /** Soft fill so dark sides are never pure black. */
@@ -59,26 +69,31 @@ export const ENV_MAP_INTENSITY = 0.55;
 export const AMBIENT = { color: 0x1a2a44, intensity: 0.3 };
 
 /** Star field particle counts. */
-export const STARS = { desktop: 2400, mobile: 800 };
+export const STARS = { desktop: 3000, mobile: 900 };
 
 /**
  * Camera rest distance from a planet of radius r.
- * Close enough that the planet fills the left side of the viewport
- * and extends beyond the edge — the "in-orbit first-person" feel.
+ * Close enough for the first-person "in-orbit" feel.
  */
 export const restDistance = (radius: number) => radius * 2.2 + 0.3;
 
-/**
- * Camera distance for the hero overview — far enough to frame the whole system.
- * Camera sits far behind looking forward down the planet line.
- */
-export const HERO_DISTANCE = 40;
+/** Orbit rings hidden — they don't make sense for a scattered layout. */
+export const ORBIT_RING_OPACITY = 0;
 
-/** Hero camera target — centered along the planet line so the whole system is framed. */
-export const HERO_TARGET: [number, number, number] = [20, 0, 0];
+/* ─────────────────────────────────────────────── */
+/*  Add-on orbiter config                          */
+/* ─────────────────────────────────────────────── */
 
-/** Opacity of the orbit ring torus — very subtle for the linear layout. */
-export const ORBIT_RING_OPACITY = 0.03;
+export interface AddonConfig {
+  /** What kind of holographic orbiter to build. */
+  kind: "holoPlane" | "techRing" | "particle";
+  /** How many to spawn. */
+  count: number;
+  /** Min/max orbital radius (as a multiple of planet radius). */
+  orbitRadius: [number, number];
+  /** Min/max orbital tilt (radians). */
+  tilt: [number, number];
+}
 
 /* ─────────────────────────────────────────────── */
 /*  Planet data                                    */
@@ -93,22 +108,30 @@ export interface SolarPlanet {
   title: string;
   /** Section body text. */
   description: string;
-  /** Planet mesh radius — larger for an imposing first-person feel. */
+  /** Planet mesh radius. */
   radius: number;
-  /** Distance from the star along the X axis. Wide spacing so the next planet appears small. */
+  /** Distance from the star (orbit radius). */
   orbit: number;
-  /** Angle on the orbit (radians). Zero → planet sits on the positive X axis. */
+  /** Angle on the orbit (radians). Random spread around the star. */
   angle: number;
+  /** Vertical offset from the orbital plane — adds 3D depth. */
+  yOffset: number;
   /** Texture file under TEXTURE_PATH. */
   texture: string;
-  /** Tint multiplied over the (grey) texture → palette. */
+  /** Tint multiplied over the texture. */
   tint: number;
+  /** Accent colour for the holographic add-ons (hex integer). */
+  accentColor: number;
+  /** Whether this planet has a planetary ring system (e.g. Saturn). */
+  hasRings?: boolean;
+  /** What orbiter types float around this planet. */
+  addons: AddonConfig[];
 }
 
 /**
- * Five fictional planets arranged linearly along the X axis.
- * Wide spacing means the "next planet" appears small and distant on the right
- * while the active planet fills the left side of the viewport.
+ * Five fictional planets scattered at random angles around the star.
+ * Wide spacing so the "next planet" is a small distant dot.
+ * Each has unique holographic add-on orbiters.
  */
 export const PLANETS: SolarPlanet[] = [
   {
@@ -118,10 +141,17 @@ export const PLANETS: SolarPlanet[] = [
     description:
       "Where ideas ignite. Every journey starts with a single spark — the moment raw curiosity meets unbounded ambition.",
     radius: 1.4,
-    orbit: 5.0,
-    angle: 0,
-    texture: "2k_eris_fictional.jpg",
+    orbit: 12,
+    angle: -1.8,
+    yOffset: 0,
+    texture: "4k_eris_fictional.jpg",
     tint: 0x8fa6c8,
+    accentColor: 0x6fd9ff,
+    addons: [
+      { kind: "holoPlane", count: 6, orbitRadius: [2.4, 3.4], tilt: [0.2, 0.5] },
+      { kind: "techRing", count: 2, orbitRadius: [2.6, 3.0], tilt: [0.3, 0.45] },
+      { kind: "particle", count: 16, orbitRadius: [2.0, 4.0], tilt: [0.1, 0.6] },
+    ],
   },
   {
     name: "Veylith",
@@ -130,10 +160,17 @@ export const PLANETS: SolarPlanet[] = [
     description:
       "Tempered by iteration. We shape concepts through relentless craft until they crystallize into something extraordinary.",
     radius: 1.7,
-    orbit: 14.0,
-    angle: 0,
-    texture: "2k_ceres_fictional.jpg",
+    orbit: 28,
+    angle: 0.7,
+    yOffset: 2,
+    texture: "4k_ceres_fictional.jpg",
     tint: 0xc89372,
+    accentColor: 0xffc96b,
+    addons: [
+      { kind: "holoPlane", count: 8, orbitRadius: [2.2, 3.6], tilt: [0.15, 0.55] },
+      { kind: "techRing", count: 3, orbitRadius: [2.5, 3.2], tilt: [0.2, 0.5] },
+      { kind: "particle", count: 20, orbitRadius: [1.8, 4.2], tilt: [0.1, 0.65] },
+    ],
   },
   {
     name: "Thalara",
@@ -142,10 +179,17 @@ export const PLANETS: SolarPlanet[] = [
     description:
       "Design in motion. Systems that breathe, adapt, and flow — alive with purpose at every scale.",
     radius: 1.2,
-    orbit: 24.0,
-    angle: 0,
-    texture: "2k_haumea_fictional.jpg",
+    orbit: 45,
+    angle: -0.4,
+    yOffset: -1.5,
+    texture: "4k_haumea_fictional.jpg",
     tint: 0x7fc4b6,
+    accentColor: 0x5cf2a6,
+    addons: [
+      { kind: "holoPlane", count: 5, orbitRadius: [2.6, 3.2], tilt: [0.25, 0.45] },
+      { kind: "techRing", count: 2, orbitRadius: [2.4, 2.9], tilt: [0.35, 0.5] },
+      { kind: "particle", count: 14, orbitRadius: [2.2, 3.8], tilt: [0.15, 0.55] },
+    ],
   },
   {
     name: "Novaryn",
@@ -154,21 +198,36 @@ export const PLANETS: SolarPlanet[] = [
     description:
       "Scaling outward. From a single point of light to a constellation — building systems that endure.",
     radius: 1.6,
-    orbit: 35.0,
-    angle: 0,
-    texture: "2k_makemake_fictional.jpg",
+    orbit: 65,
+    angle: 1.6,
+    yOffset: 3,
+    texture: "4k_makemake_fictional.jpg",
     tint: 0xa890c8,
+    accentColor: 0xbb97ff,
+    addons: [
+      { kind: "holoPlane", count: 7, orbitRadius: [2.3, 3.5], tilt: [0.2, 0.5] },
+      { kind: "techRing", count: 3, orbitRadius: [2.7, 3.4], tilt: [0.25, 0.4] },
+      { kind: "particle", count: 18, orbitRadius: [1.9, 4.2], tilt: [0.1, 0.6] },
+    ],
   },
   {
-    name: "Pyralis",
-    kicker: "Orbit 05 — Pyralis",
+    name: "Saturn",
+    kicker: "Orbit 05 — Saturn",
     title: "The Arrival",
     description:
       "You've reached the edge of the map. What we build next is uncharted. Let's make contact.",
-    radius: 1.5,
-    orbit: 48.0,
-    angle: 0,
-    texture: "2k_moon.jpg",
-    tint: 0xc88a66,
+    radius: 1.8,
+    orbit: 90,
+    angle: -1.2,
+    yOffset: -2,
+    texture: "8k_saturn.jpg",
+    hasRings: true,
+    tint: 0xffffff, // Saturn already has its own strong color
+    accentColor: 0xffe28b,
+    addons: [
+      { kind: "holoPlane", count: 6, orbitRadius: [3.5, 4.3], tilt: [0.2, 0.5] },
+      { kind: "techRing", count: 2, orbitRadius: [3.8, 4.1], tilt: [0.3, 0.45] },
+      { kind: "particle", count: 20, orbitRadius: [3.1, 5.0], tilt: [0.12, 0.58] },
+    ],
   },
 ];

@@ -10,16 +10,17 @@ import { buildSolarJourney } from "./solarJourney";
 const SECTION_COUNT = PLANETS.length + 1;
 
 /**
- * Solar-system landing page: a full-viewport WebGL canvas showing a blue star
- * and five fictional planets on tilted orbits. GSAP ScrollTrigger scrubs the
- * camera from an overview (hero) into each planet, with the next planet
- * always peeking on the right.
+ * Solar-system landing page: a full-viewport WebGL canvas with a blue star
+ * and five fictional planets scattered around it. GSAP ScrollTrigger drives
+ * a cinematic camera: bird's-eye hero → crane-down → planet-to-planet with sway.
+ * Holographic add-on orbiters appear around the active planet.
  */
 export default function SolarLanding() {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
   const planetPanelRefs = useRef<HTMLDivElement[]>([]);
+  const sceneRef = useRef<SolarScene | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [reducedMotion, setReducedMotion] = useState(false);
 
@@ -35,6 +36,7 @@ export default function SolarLanding() {
     if (!wrapperElement || !canvasElement || !heroElement) return;
 
     const scene = new SolarScene(canvasElement, PLANETS);
+    sceneRef.current = scene;
     scene.start();
 
     const journey = buildSolarJourney({
@@ -57,9 +59,15 @@ export default function SolarLanding() {
       journey.scrollTrigger.kill();
       journey.timeline.kill();
       scene.dispose();
+      sceneRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Sync active index → show/hide holographic add-on orbiters. */
+  useEffect(() => {
+    sceneRef.current?.setActivePlanet(activeIndex);
+  }, [activeIndex]);
 
   /* ─── Reduced-motion fallback ────────────────────────────────────── */
   if (reducedMotion) {
