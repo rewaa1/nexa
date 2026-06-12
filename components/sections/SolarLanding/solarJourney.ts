@@ -46,7 +46,8 @@ export function buildSolarJourney({
 
   /**
    * Animated camera state — GSAP tweens these values, onUpdate pushes them
-   * to the scene. `swayZ` is added to `posZ` for the lateral sway effect.
+   * to the scene. `swayOffset` (lateral) and `swayLift` (vertical) are applied
+   * relative to the camera's local orientation to avoid clipping.
    */
   const camera = {
     posX: heroState.posX,
@@ -55,7 +56,8 @@ export function buildSolarJourney({
     lookX: heroState.lookX,
     lookY: heroState.lookY,
     lookZ: heroState.lookZ,
-    swayZ: 0,
+    swayOffset: 0,
+    swayLift: 0,
   };
 
   const timeline = gsap.timeline({
@@ -63,10 +65,12 @@ export function buildSolarJourney({
       scene.setCameraState(
         camera.posX,
         camera.posY,
-        camera.posZ + camera.swayZ,
+        camera.posZ,
         camera.lookX,
         camera.lookY,
-        camera.lookZ
+        camera.lookZ,
+        camera.swayOffset,
+        camera.swayLift
       ),
   });
 
@@ -142,14 +146,14 @@ export function buildSolarJourney({
       transitionStart
     );
 
-    // Sway: right → left → center (three sequential tweens on swayZ)
+    // Sway: right → left → center (lateral) and lift up → down (vertical)
     const swaySegment = TRANSITION / 3;
 
     // 0 → +A (sway right, slow start)
     timeline.to(
       camera,
       {
-        swayZ: SWAY_AMPLITUDE,
+        swayOffset: SWAY_AMPLITUDE,
         duration: swaySegment,
         ease: "power2.out",
       },
@@ -160,7 +164,7 @@ export function buildSolarJourney({
     timeline.to(
       camera,
       {
-        swayZ: -SWAY_AMPLITUDE,
+        swayOffset: -SWAY_AMPLITUDE,
         duration: swaySegment,
         ease: "power1.inOut",
       },
@@ -171,17 +175,38 @@ export function buildSolarJourney({
     timeline.to(
       camera,
       {
-        swayZ: 0,
+        swayOffset: 0,
         duration: swaySegment,
         ease: "power2.in",
       },
       transitionStart + swaySegment * 2
     );
 
-    // Previous panel fades out, new panel fades in
+    // Vertical lift to go OVER the planets during transition
+    timeline.to(
+      camera,
+      {
+        swayLift: SWAY_AMPLITUDE * 0.8,
+        duration: TRANSITION / 2,
+        ease: "power2.out",
+      },
+      transitionStart
+    );
+
+    timeline.to(
+      camera,
+      {
+        swayLift: 0,
+        duration: TRANSITION / 2,
+        ease: "power2.in",
+      },
+      transitionStart + TRANSITION / 2
+    );
+
+    // Hide old panel
     timeline.to(
       planetPanels[index - 1],
-      { autoAlpha: 0, y: -20, duration: 0.3, ease: "power2.in" },
+      { autoAlpha: 0, y: -24, duration: 0.3, ease: "power2.in" },
       transitionStart
     );
 
@@ -200,25 +225,33 @@ export function buildSolarJourney({
   // ─── ScrollTrigger binding ────────────────────────────────────────────
   const totalDuration = timeline.duration();
   const restPoints = restCenters.map((center) => center / totalDuration);
-  const stepCount = restPoints.length - 1;
 
   const scrollTrigger = ScrollTrigger.create({
-    trigger,
+    animation: timeline,
+    trigger: trigger,
     start: "top top",
     end: "bottom bottom",
-    scrub: true,
-    animation: timeline,
+    scrub: 1.5,
     snap: {
-      snapTo: restPoints,
-      duration: { min: 0.2, max: 0.6 },
-      ease: "power1.inOut",
-      delay: 0.05,
+      snapTo: 1 / planetCount,
+      duration: { min: 0.6, max: 1.2 },
+      delay: 0.7,
+      ease: "power2.inOut",
     },
-    onUpdate: (self) => {
-      // -1 = hero, 0+ = planet index
-      const rawIndex = Math.round(self.progress * stepCount);
-      onActive(rawIndex - 1);
-    },
+  });
+
+  // Attach an event to ScrollTrigger to trigger onActive exactly when snapping/scrolling stops
+  ScrollTrigger.addEventListener("scrollEnd", () => {
+    // Determine the closest resting section based on scroll progress
+    const scrollProgress = scrollTrigger.progress;
+    const progressPerSection = 1 / planetCount;
+    // index -1 is hero, 0 is planet 0, 1 is planet 1, etc.
+    const rawIndex = Math.round(scrollProgress / progressPerSection) - 1;
+    if (rawIndex >= 0) {
+      onActive(rawIndex);
+    } else {
+      onActive(-1);
+    }
   });
 
   return { scrollTrigger, timeline, restPoints };

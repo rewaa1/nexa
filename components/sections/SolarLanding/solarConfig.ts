@@ -38,7 +38,7 @@ export const HERO_CAM_LOOK: [number, number, number] = [0, 0, 15];
  * Sway amplitude during planet-to-planet transitions.
  * The camera sways right (+Z), then left (-Z), then settles at center (0).
  */
-export const SWAY_AMPLITUDE = 3.5;
+export const SWAY_AMPLITUDE = 12.0;
 
 /** Where the planet textures live under /public. */
 export const TEXTURE_PATH = "/textures/planets/";
@@ -75,7 +75,7 @@ export const STARS = { desktop: 3000, mobile: 900 };
  * Camera rest distance from a planet of radius r.
  * Close enough for the first-person "in-orbit" feel.
  */
-export const restDistance = (radius: number) => radius * 2.2 + 0.3;
+export const restDistance = (radius: number) => radius * 3.5 + 1.0;
 
 /** Orbit rings hidden — they don't make sense for a scattered layout. */
 export const ORBIT_RING_OPACITY = 0;
@@ -85,14 +85,10 @@ export const ORBIT_RING_OPACITY = 0;
 /* ─────────────────────────────────────────────── */
 
 export interface AddonConfig {
-  /** What kind of holographic orbiter to build. */
-  kind: "holoPlane" | "techRing" | "particle";
-  /** How many to spawn. */
+  kind: "holoPlane" | "techRing" | "particle" | "gear" | "dashedRing";
   count: number;
-  /** Min/max orbital radius (as a multiple of planet radius). */
-  orbitRadius: [number, number];
-  /** Min/max orbital tilt (radians). */
-  tilt: [number, number];
+  orbitRadius: [number, number]; // [min, max]
+  tilt: [number, number]; // [min, max] radians
 }
 
 /* ─────────────────────────────────────────────── */
@@ -148,9 +144,9 @@ export const PLANETS: SolarPlanet[] = [
     tint: 0x8fa6c8,
     accentColor: 0x6fd9ff,
     addons: [
-      { kind: "holoPlane", count: 6, orbitRadius: [2.4, 3.4], tilt: [0.2, 0.5] },
-      { kind: "techRing", count: 2, orbitRadius: [2.6, 3.0], tilt: [0.3, 0.45] },
-      { kind: "particle", count: 16, orbitRadius: [2.0, 4.0], tilt: [0.1, 0.6] },
+      { kind: "holoPlane", count: 4, orbitRadius: [2.2, 3.0], tilt: [0.15, 0.35] },
+      { kind: "techRing", count: 2, orbitRadius: [2.4, 2.8], tilt: [0.25, 0.4] },
+      { kind: "dashedRing", count: 1, orbitRadius: [3.1, 3.3], tilt: [0.3, 0.5] },
     ],
   },
   {
@@ -205,9 +201,9 @@ export const PLANETS: SolarPlanet[] = [
     tint: 0xa890c8,
     accentColor: 0xbb97ff,
     addons: [
-      { kind: "holoPlane", count: 7, orbitRadius: [2.3, 3.5], tilt: [0.2, 0.5] },
-      { kind: "techRing", count: 3, orbitRadius: [2.7, 3.4], tilt: [0.25, 0.4] },
-      { kind: "particle", count: 18, orbitRadius: [1.9, 4.2], tilt: [0.1, 0.6] },
+      { kind: "gear", count: 2, orbitRadius: [2.0, 2.6], tilt: [0.1, 0.3] },
+      { kind: "dashedRing", count: 2, orbitRadius: [2.7, 3.0], tilt: [0.2, 0.4] },
+      { kind: "particle", count: 10, orbitRadius: [1.8, 3.2], tilt: [0.0, 0.6] },
     ],
   },
   {
@@ -225,9 +221,9 @@ export const PLANETS: SolarPlanet[] = [
     tint: 0xffffff, // Saturn already has its own strong color
     accentColor: 0xffe28b,
     addons: [
-      { kind: "holoPlane", count: 6, orbitRadius: [3.5, 4.3], tilt: [0.2, 0.5] },
-      { kind: "techRing", count: 2, orbitRadius: [3.8, 4.1], tilt: [0.3, 0.45] },
-      { kind: "particle", count: 20, orbitRadius: [3.1, 5.0], tilt: [0.12, 0.58] },
+      { kind: "holoPlane", count: 5, orbitRadius: [1.8, 2.5], tilt: [0.3, 0.6] },
+      { kind: "dashedRing", count: 2, orbitRadius: [2.2, 2.8], tilt: [0.4, 0.5] },
+      { kind: "gear", count: 1, orbitRadius: [2.0, 2.2], tilt: [0.2, 0.7] },
     ],
   },
 ];

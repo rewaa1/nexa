@@ -72,7 +72,7 @@ export class SolarScene {
   /** Holographic add-on orbiter groups — one per planet. */
   private readonly addonGroups: THREE.Group[] = [];
   /** All materials inside each addon group (for opacity control). */
-  private readonly addonMaterials: THREE.MeshBasicMaterial[][] = [];
+  private readonly addonMaterials: THREE.Material[][] = [];
   /** The GSAP proxy objects controlling opacity per group. */
   private readonly addonOpacities = {
     values: [] as number[],
@@ -87,7 +87,7 @@ export class SolarScene {
     this.restDistances = planetData.map((planet) => restDistance(planet.radius));
 
     // --- renderer ---
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(viewportWidth, viewportHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -196,7 +196,6 @@ export class SolarScene {
         const ringTexture = textureLoader.load(TEXTURE_PATH + "8k_saturn_ring_alpha.png");
         this.textures.push(ringTexture);
         const ringGeo = new THREE.RingGeometry(planet.radius * 1.3, planet.radius * 2.2, 64);
-        // Correct UVs for RingGeometry to map the horizontal gradient properly
         const pos = ringGeo.attributes.position;
         const uvs = ringGeo.attributes.uv;
         const v3 = new THREE.Vector3();
@@ -237,21 +236,13 @@ export class SolarScene {
 
     for (let i = 0; i < this.planetPositions.length; i++) {
       const currentPos = this.planetPositions[i];
-      // Target the next planet, or the sun (0,0,0) if it's the last planet
       const nextPos = i < this.planetPositions.length - 1 ? this.planetPositions[i + 1] : new THREE.Vector3(0, 0, 0);
 
-      // Direction from current planet towards the next visual target
       const dir = new THREE.Vector3().subVectors(nextPos, currentPos).normalize();
-      
-      // Calculate a local right vector relative to the line of sight
       const right = new THREE.Vector3().crossVectors(dir, UP).normalize();
-      // Ensure local up is perfectly orthogonal
       const up = new THREE.Vector3().crossVectors(right, dir).normalize();
 
       const dist = this.restDistances[i];
-
-      // Position camera backwards along dir, and slightly UP for a good angle.
-      // Crucially, shift the camera RIGHT to place the planet "between middle and left".
       const shiftRight = dist * 0.28; 
       const shiftUp = dist * 0.12;
       
@@ -260,7 +251,6 @@ export class SolarScene {
         .addScaledVector(right, shiftRight)
         .addScaledVector(up, shiftUp);
 
-      // Look slightly to the right of the planet so it stays framed left
       const lookAtTarget = currentPos.clone().addScaledVector(right, shiftRight * 0.8);
 
       this.planetStates.push({
@@ -274,26 +264,32 @@ export class SolarScene {
     }
   }
 
-  private buildAddons(planet: SolarPlanet): { group: THREE.Group; materials: THREE.MeshBasicMaterial[] } {
+  private buildAddons(planet: SolarPlanet): { group: THREE.Group; materials: THREE.Material[] } {
     const group = new THREE.Group();
-    const materials: THREE.MeshBasicMaterial[] = [];
+    const materials: THREE.Material[] = [];
     const accent = new THREE.Color(planet.accentColor);
+    
     const holoTexture = this.createHoloTexture(planet.accentColor);
+    const dashedTexture = this.createDashedRingTexture(planet.accentColor);
 
     for (const addon of planet.addons) {
       for (let index = 0; index < addon.count; index++) {
-        const { mesh, material } = this.createOrbiterMesh(addon, index, accent, holoTexture);
+        const { mesh, material } = this.createOrbiterMesh(addon, index, accent, holoTexture, dashedTexture);
 
-        const orbitRadius = planet.radius * (addon.orbitRadius[0] + Math.random() * (addon.orbitRadius[1] - addon.orbitRadius[0]));
+        const targetOrbitRadius = planet.radius * (addon.orbitRadius[0] + Math.random() * (addon.orbitRadius[1] - addon.orbitRadius[0]));
         const tilt = addon.tilt[0] + Math.random() * (addon.tilt[1] - addon.tilt[0]);
 
         mesh.userData = {
           kind: addon.kind,
-          orbitRadius,
+          targetOrbitRadius,
+          currentOrbitRadius: 0, // Starts at 0 (core of planet)
           tilt,
           speed: 0.15 + Math.random() * 0.35,
           phase: Math.random() * Math.PI * 2,
         };
+
+        // Start hidden and scaled down
+        mesh.scale.set(0.01, 0.01, 0.01);
 
         group.add(mesh);
         materials.push(material);
@@ -310,50 +306,175 @@ export class SolarScene {
     addon: AddonConfig,
     index: number,
     accent: THREE.Color,
-    holoTexture: THREE.CanvasTexture
-  ): { mesh: THREE.Mesh; material: THREE.MeshBasicMaterial } {
+    holoTexture: THREE.CanvasTexture,
+    dashedTexture: THREE.CanvasTexture
+  ): { mesh: THREE.Mesh; material: THREE.Material } {
     let geometry: THREE.BufferGeometry;
     let baseOpacity: number;
+    let material: THREE.Material;
 
     switch (addon.kind) {
+      case "gear": {
+        const radius = 0.8 + Math.random() * 0.6;
+        const teeth = Math.floor(12 + Math.random() * 8);
+        geometry = this.createGearGeometry(radius, radius * 0.8, radius * 0.6, teeth);
+        baseOpacity = 0.9;
+        
+        material = new THREE.MeshStandardMaterial({
+          color: accent,
+          metalness: 0.8,
+          roughness: 0.2,
+          transparent: true,
+          opacity: 0,
+        });
+        break;
+      }
+      case "dashedRing": {
+        const width = 0.4 + Math.random() * 0.3;
+        geometry = new THREE.RingGeometry(1.0, 1.0 + width, 64);
+        baseOpacity = 0.85;
+        
+        material = new THREE.MeshBasicMaterial({
+          map: dashedTexture,
+          color: accent,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
+        break;
+      }
       case "holoPlane": {
-        // Use a curved screen (cylinder segment) instead of a flat plane
         const radius = 1.0 + Math.random() * 0.5;
         const height = 0.4 + Math.random() * 0.4;
         const thetaLength = 0.4 + Math.random() * 0.4;
         geometry = new THREE.CylinderGeometry(radius, radius, height, 16, 1, true, 0, thetaLength);
-        baseOpacity = 0.85; // Boosted opacity
+        baseOpacity = 0.85;
+        
+        material = new THREE.MeshBasicMaterial({
+          map: holoTexture,
+          color: accent,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        });
         break;
       }
       case "techRing": {
         const ringRadius = 0.4 + Math.random() * 0.6;
         geometry = new THREE.TorusGeometry(ringRadius, 0.015, 8, 64);
         baseOpacity = 0.65;
+        
+        material = new THREE.MeshBasicMaterial({
+          color: accent,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
         break;
       }
       case "particle":
       default: {
         geometry = new THREE.SphereGeometry(0.04 + Math.random() * 0.05, 8, 8);
         baseOpacity = 0.95;
+        
+        material = new THREE.MeshBasicMaterial({
+          color: accent,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
         break;
       }
     }
-
-    const material = new THREE.MeshBasicMaterial({
-      color: accent,
-      transparent: true,
-      opacity: 0,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: addon.kind === "holoPlane" ? THREE.DoubleSide : THREE.FrontSide,
-      map: addon.kind === "holoPlane" ? holoTexture : null,
-    });
 
     material.userData = { baseOpacity };
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.renderOrder = index;
+    
+    // Gears rotate around their local Z axis (which we'll point outward or align)
+    // To make them lay flat in the orbit plane, we rotate them.
+    if (addon.kind === "gear" || addon.kind === "dashedRing") {
+      mesh.rotation.x = Math.PI / 2;
+    }
+
     return { mesh, material };
+  }
+
+  private createGearGeometry(outerRadius: number, innerRadius: number, holeRadius: number, teethCount: number): THREE.ExtrudeGeometry {
+    const shape = new THREE.Shape();
+    const angleStep = (Math.PI * 2) / teethCount;
+    
+    for (let i = 0; i < teethCount; i++) {
+      const angle = i * angleStep;
+      const halfTooth = angleStep * 0.25;
+      
+      if (i === 0) shape.moveTo(Math.cos(angle - halfTooth) * innerRadius, Math.sin(angle - halfTooth) * innerRadius);
+      else shape.lineTo(Math.cos(angle - halfTooth) * innerRadius, Math.sin(angle - halfTooth) * innerRadius);
+      
+      shape.lineTo(Math.cos(angle - halfTooth * 0.5) * outerRadius, Math.sin(angle - halfTooth * 0.5) * outerRadius);
+      shape.lineTo(Math.cos(angle + halfTooth * 0.5) * outerRadius, Math.sin(angle + halfTooth * 0.5) * outerRadius);
+      shape.lineTo(Math.cos(angle + halfTooth) * innerRadius, Math.sin(angle + halfTooth) * innerRadius);
+    }
+    
+    const holePath = new THREE.Path();
+    holePath.absarc(0, 0, holeRadius, 0, Math.PI * 2, false);
+    shape.holes.push(holePath);
+
+    return new THREE.ExtrudeGeometry(shape, {
+      depth: 0.1,
+      bevelEnabled: true,
+      bevelSegments: 2,
+      steps: 1,
+      bevelSize: 0.02,
+      bevelThickness: 0.02,
+      curveSegments: 12
+    });
+  }
+
+  private createDashedRingTexture(accentHex: number): THREE.CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    const context = canvas.getContext("2d")!;
+    
+    const red = (accentHex >> 16) & 0xff;
+    const green = (accentHex >> 8) & 0xff;
+    const blue = accentHex & 0xff;
+    
+    context.translate(256, 256);
+    context.strokeStyle = `rgba(${red}, ${green}, ${blue}, 0.9)`;
+    
+    // Outer dashed arc
+    context.lineWidth = 16;
+    context.setLineDash([30, 20, 10, 20]);
+    context.beginPath();
+    context.arc(0, 0, 230, 0, Math.PI * 2);
+    context.stroke();
+    
+    // Inner thin ring
+    context.lineWidth = 4;
+    context.setLineDash([]);
+    context.beginPath();
+    context.arc(0, 0, 200, 0, Math.PI * 2);
+    context.stroke();
+    
+    // Tick marks
+    context.lineWidth = 6;
+    context.setLineDash([4, 60]);
+    context.beginPath();
+    context.arc(0, 0, 215, 0, Math.PI * 2);
+    context.stroke();
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
   }
 
   private createHoloTexture(accentHex: number): THREE.CanvasTexture {
@@ -366,27 +487,23 @@ export class SolarScene {
     const green = (accentHex >> 8) & 0xff;
     const blue = accentHex & 0xff;
 
-    // Gradient fill
     const gradient = context.createLinearGradient(0, 0, 256, 128);
     gradient.addColorStop(0, `rgba(${red}, ${green}, ${blue}, 0.95)`);
     gradient.addColorStop(1, `rgba(${Math.max(0, red - 20)}, ${Math.max(0, green - 20)}, ${Math.min(255, blue + 20)}, 0.4)`);
     context.fillStyle = gradient;
     context.fillRect(0, 0, 256, 128);
 
-    // Fake UI content shapes
     context.fillStyle = "rgba(255, 255, 255, 0.4)";
     context.fillRect(16, 16, 100, 8);
     context.fillRect(16, 36, 160, 40);
     context.fillRect(16, 88, 120, 6);
     context.fillRect(16, 104, 90, 6);
 
-    // Scanlines for hologram feel
     context.fillStyle = "rgba(0, 0, 0, 0.3)";
     for (let scanY = 0; scanY < 128; scanY += 4) {
       context.fillRect(0, scanY, 256, 2);
     }
 
-    // Glowing border
     context.strokeStyle = `rgba(${red}, ${green}, ${blue}, 0.9)`;
     context.lineWidth = 4;
     context.strokeRect(2, 2, 252, 124);
@@ -440,9 +557,17 @@ export class SolarScene {
   /*  Public API                                 */
   /* ─────────────────────────────────────────── */
 
-  setCameraState(posX: number, posY: number, posZ: number, lookX: number, lookY: number, lookZ: number) {
+  setCameraState(posX: number, posY: number, posZ: number, lookX: number, lookY: number, lookZ: number, swayOffset: number = 0, swayLift: number = 0) {
     this.camera.position.set(posX, posY, posZ);
     this.camera.lookAt(lookX, lookY, lookZ);
+
+    if (swayOffset !== 0 || swayLift !== 0) {
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+      
+      this.camera.position.addScaledVector(right, swayOffset);
+      this.camera.position.addScaledVector(up, swayLift);
+    }
   }
 
   setActivePlanet(index: number) {
@@ -450,19 +575,44 @@ export class SolarScene {
     this.activePlanetIndex = index;
 
     for (let i = 0; i < this.addonGroups.length; i++) {
+      const group = this.addonGroups[i];
+
       if (i === index) {
-        // Flicker on sequence with GSAP: 0.5s delay -> flash on -> off -> solid on
+        // Fade in opacity
         gsap.killTweensOf(this.addonOpacities.values, i.toString());
-        gsap.timeline()
-          .set(this.addonOpacities.values, { [i]: 0 })
-          .to(this.addonOpacities.values, { [i]: 1, duration: 0.1, delay: 0.5, ease: "power4.out" })
-          .to(this.addonOpacities.values, { [i]: 0.1, duration: 0.1, ease: "power4.in" })
-          .to(this.addonOpacities.values, { [i]: 0.8, duration: 0.08, ease: "power4.out" })
-          .to(this.addonOpacities.values, { [i]: 0.3, duration: 0.08, ease: "power4.in" })
-          .to(this.addonOpacities.values, { [i]: 1, duration: 0.3, ease: "power2.out" });
+        gsap.to(this.addonOpacities.values, { [i]: 1, duration: 1.5, ease: "power2.out" });
+
+        // Physical scale and expansion outward from the planet
+        for (const child of group.children) {
+          const ud = child.userData;
+          
+          gsap.killTweensOf(ud);
+          gsap.killTweensOf(child.scale);
+
+          // Spring outward to target orbit radius
+          gsap.fromTo(
+            ud,
+            { currentOrbitRadius: 0 },
+            { currentOrbitRadius: ud.targetOrbitRadius, duration: 2.0, ease: "back.out(1.2)", delay: Math.random() * 0.2 }
+          );
+
+          // Scale up from nothing
+          gsap.fromTo(
+            child.scale,
+            { x: 0.01, y: 0.01, z: 0.01 },
+            { x: 1, y: 1, z: 1, duration: 2.0, ease: "back.out(1.2)", delay: Math.random() * 0.2 }
+          );
+        }
       } else {
-        // Smooth fade out for inactive planets
-        gsap.to(this.addonOpacities.values, { [i]: 0, duration: 0.6, ease: "power2.inOut" });
+        // Fade out gracefully
+        gsap.to(this.addonOpacities.values, { [i]: 0, duration: 0.8, ease: "power2.inOut" });
+
+        // Shrink back into the planet
+        for (const child of group.children) {
+          const ud = child.userData;
+          gsap.to(ud, { currentOrbitRadius: 0, duration: 0.8, ease: "power2.in" });
+          gsap.to(child.scale, { x: 0.01, y: 0.01, z: 0.01, duration: 0.8, ease: "power2.in" });
+        }
       }
     }
   }
@@ -504,7 +654,7 @@ export class SolarScene {
 
         userData.phase += userData.speed * 0.016;
         const angle = userData.phase as number;
-        const orbitRadius = userData.orbitRadius as number;
+        const orbitRadius = userData.currentOrbitRadius as number;
         const tilt = userData.tilt as number;
 
         const cosAngle = Math.cos(angle);
@@ -517,9 +667,11 @@ export class SolarScene {
         );
 
         if (userData.kind === "holoPlane") {
-          // Billboarding, but since they are curved cylinders we rotate them to face the camera properly
           child.lookAt(this.camera.position);
-          child.rotateX(Math.PI / 2); // align cylinder upright relative to look vector
+          child.rotateX(Math.PI / 2);
+        } else if (userData.kind === "gear" || userData.kind === "dashedRing") {
+          // Keep them flat on the orbital plane but spin them slowly
+          child.rotation.z -= userData.speed * 0.008;
         }
       }
     }
