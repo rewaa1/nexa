@@ -21,14 +21,14 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "STUD.IO — Full-spectrum web studio",
+  title: "orbix — software with gravity",
   description:
-    "We don't build websites. We build worlds. A small, fiercely focused studio crafting SaaS products, commerce platforms, campaigns and mobile-first apps.",
-  metadataBase: new URL("https://stud.io"),
+    "A software company building products with their own gravity. Custom web applications, SaaS platforms, enterprise CRM, mobile apps and AI systems.",
+  metadataBase: new URL("https://orbix.studio"),
   openGraph: {
-    title: "STUD.IO — We build worlds",
+    title: "orbix — software with gravity",
     description:
-      "Cinematic, story-driven web experiences. SaaS, commerce, campaigns, and mobile-first apps.",
+      "Dive from the edge of the system to the core. Custom web applications, SaaS, CRM, mobile and AI — engineered to hold users in orbit.",
     type: "website",
   },
 };

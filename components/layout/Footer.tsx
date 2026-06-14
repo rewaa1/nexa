@@ -10,9 +10,9 @@ export default function Footer() {
     >
       <div className="mx-auto flex max-w-[1400px] flex-col items-center gap-8 px-6 py-10 md:flex-row md:justify-between md:px-10">
         {/* Logo */}
-        <a href="#top" data-cursor="link" aria-label="STUD.IO home">
+        <a href="#top" data-cursor="link" aria-label="orbix home">
           <span className="font-display text-[18px] font-extrabold tracking-tight">
-            STUD<span style={{ color: "var(--accent)" }}>.</span>IO
+            orb<span style={{ color: "var(--accent)" }}>i</span>x
           </span>
         </a>
 
@@ -37,7 +37,7 @@ export default function Footer() {
           className="text-[10px]"
           style={{ color: "rgba(235,232,224,0.18)" }}
         >
-          © 2025 Studio. All rights reserved.
+          © 2026 orbix. All systems nominal.
         </span>
       </div>
     </footer>

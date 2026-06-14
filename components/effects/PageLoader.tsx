@@ -50,7 +50,21 @@ export default function PageLoader() {
   }
 
   const Active = LOADERS[key];
-  return <Active onComplete={() => setPhase("done")} />;
+  return (
+    <Active
+      onComplete={() => {
+        setPhase("done");
+        // Mark the handoff so listeners that register late (slow WebGL setup,
+        // HMR remounts) can catch up without waiting for their fallback timer.
+        document.documentElement.dataset.orbixLoaded = "true";
+        // Hand off to the page on a fresh task, not from inside the loader's
+        // GSAP onComplete: tweens created by reveal listeners would otherwise
+        // join the loader's gsap.context — scoped to the loader's DOM and
+        // killed by its revert() on unmount.
+        window.setTimeout(() => window.dispatchEvent(new Event("orbix:reveal")), 0);
+      }}
+    />
+  );
 }
 
 function resolveLoader(): LoaderKey {

@@ -12,7 +12,7 @@ function Logo({ className = "" }: { className?: string }) {
     <span
       className={`font-display text-[18px] font-extrabold tracking-tight ${className}`}
     >
-      STUD<span style={{ color: "var(--accent)" }}>.</span>IO
+      orb<span style={{ color: "var(--accent)" }}>i</span>x
     </span>
   );
 }
@@ -62,7 +62,7 @@ export default function Navbar() {
 
       <nav className="mx-auto flex h-[68px] max-w-[1400px] items-center justify-between px-6 md:px-10">
         {/* Left: logo */}
-        <a href="#top" data-cursor="link" aria-label="STUD.IO home">
+        <a href="#top" data-cursor="link" aria-label="orbix home">
           <Logo />
         </a>
 
