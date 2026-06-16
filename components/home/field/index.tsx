@@ -179,7 +179,14 @@ export default function FieldHome() {
           ref={(el) => {
             if (el) panels.current[i] = el;
           }}
-          className={`field-panel${s.kind === "hero" || s.kind === "core" ? " is-center" : ""}`}
+          className={[
+            "field-panel",
+            `field-panel--${s.kind}`,
+            (s.kind === "hero" || s.kind === "core") && "is-center",
+            i === active && "is-active",
+          ]
+            .filter(Boolean)
+            .join(" ")}
           style={{ pointerEvents: i === active ? "auto" : "none" }}
         >
           <div className="field-panel-inner">
